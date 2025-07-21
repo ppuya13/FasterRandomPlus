@@ -29,6 +29,7 @@ If you speak Korean, feel free to contact me in Korean — it's much easier for 
 ---
 
 > FasterRandomPlus was made to bring faster and smoother beginnings to RimWorld.  
+
 <br><br><br>
 
 ---
