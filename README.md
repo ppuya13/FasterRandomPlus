@@ -39,7 +39,7 @@ If you speak Korean, feel free to contact me in Korean — it's much easier for 
 
 ### ⚙️ 주요 기능
 - 🔁 **리롤 최적화**: 1만 회 리롤 기준 약 1초 이내 처리  
-- 👽 **HAR(Humanoid Alien Races) 모드와의 호환성 강화**: HAR 및 그 파생 종족 모드 사용 시에도 속도 저하 최소
+- 👽 **HAR(Humanoid Alien Races) 모드와의 호환성 강화**: HAR 및 그 파생 종족 모드 사용 시에도 속도 저하 최소화
 <br><br>
 
 ### 🧩 사용법
