@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+	<packageId>balensiad.fasterrandomplus</packageId>
+	<name>FasterRandomPlus</name>
+	<author>Balensiad</author>
+	<supportedVersions>
+		<li>1.6</li>
+	</supportedVersions>
+	<description>
+랜덤플러스를 더 빠르게
+
+This mod uses RandomPlus and Harmony.
+	</description>
+	<modDependencies>
+		<li>
+			<packageId>brrainz.harmony</packageId>
+			<displayName>Harmony</displayName>
+			<steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+			<downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+		</li>
+		<li>
+			<packageId>mastertea.RandomPlus</packageId>
+			<displayName>RandomPlus</displayName>
+			<steamWorkshopUrl>steam://url/CommunityFilePage/1434137894</steamWorkshopUrl>
+			<downloadUrl>https://github.com/mastertea/RandomPlus/releases/latest</downloadUrl>
+		</li>
+	</modDependencies>
+	<loadAfter>
+		<li>brrainz.harmony</li>
+		<li>mastertea.RandomPlus</li>
+	</loadAfter>
+</ModMetaData>
