@@ -29,8 +29,8 @@ If you speak Korean, feel free to contact me in Korean — it's much easier for 
 ---
 
 > FasterRandomPlus was made to bring faster and smoother beginnings to RimWorld.  
-
 <br><br><br>
+
 ---
 
 `FasterRandomPlus`는 [RandomPlus](https://steamcommunity.com/sharedfiles/filedetails/?id=1434137894&searchtext=randomplus) 모드의 리롤 속도를 개선하기 위한 RimWorld 모드입니다.  
