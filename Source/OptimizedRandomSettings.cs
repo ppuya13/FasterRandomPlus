@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using HarmonyLib;
 using RandomPlus;
 using RimWorld;
@@ -49,6 +48,7 @@ namespace FasterRandomPlus.Source
         
         #region Stopwatch
 
+        private static readonly Stopwatch swFirst = new Stopwatch();
         private static readonly Stopwatch swAge = new Stopwatch();
         private static readonly Stopwatch swRandomize =  new Stopwatch();
         private static readonly Stopwatch swTraits = new Stopwatch();
@@ -57,11 +57,16 @@ namespace FasterRandomPlus.Source
         private static readonly Stopwatch swSkills = new Stopwatch();
         private static readonly Stopwatch swRedress = new Stopwatch();
         private static readonly Stopwatch swRelations = new Stopwatch();
+        private static readonly Stopwatch swWork = new Stopwatch();
+        private static readonly Stopwatch swPassion = new Stopwatch();
+        private static readonly Stopwatch swStyle = new Stopwatch();
+        private static readonly Stopwatch swFinalNotify = new Stopwatch();
         private static readonly Stopwatch swTotal = new Stopwatch();
 
         private static double totalRandomize;
         private static double totalAge, totalTraits, totalHealth, totalGene;
         private static double totalSkills, totalRedress, totalRelations, totalOverall;
+        private static double totalWork, totalPassion, totalStyle, totalFinalNotify;
         private static int countRuns;
 
         #endregion
@@ -113,7 +118,7 @@ namespace FasterRandomPlus.Source
         public static void Reroll(int pawnIndex)
         {
             swTotal.Restart();
-            
+            swFirst.Restart();
             var pawns = getStartingPawns();
             Pawn pawn = pawns[pawnIndex];
 
@@ -137,7 +142,12 @@ namespace FasterRandomPlus.Source
             PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
             var cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
             var cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-
+            
+            var agePart = Find.Scenario.AllParts.OfType<ScenPart_PawnFilter_Age>().FirstOrDefault();
+            var traitPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedTrait>().ToArray();
+            var hediffPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedHediff>().ToArray();
+            swFirst.Stop();
+            
             int bioFailCount = 0;
             while (randomRerollCounter < PawnFilter.RerollLimit)
             {
@@ -147,15 +157,19 @@ namespace FasterRandomPlus.Source
                     
                     swAge.Restart();
                     pawn.ageTracker = new Pawn_AgeTracker(pawn);
-                    genAge?.Invoke(pawn, req);
-                    int ageCount = 0;
-                    foreach (var agePart in Find.Scenario.AllParts.OfType<ScenPart_PawnFilter_Age>())
+                    if (agePart != null) SetRandomAgeInRange(pawn, agePart.allowedAgeRange);
+                    else genAge?.Invoke(pawn, req);
+                    
+                    if (agePart != null && !agePart.AllowPlayerStartingPawn(pawn, false, req))
                     {
-                        while (!agePart.AllowPlayerStartingPawn(pawn, false, req) && ageCount < 1000)
-                        {
-                            genAge?.Invoke(pawn, req);
-                            ageCount++;
-                        }
+                        int bioYears = pawn.ageTracker.AgeBiologicalYears;
+                        int chronoYears = pawn.ageTracker.AgeChronologicalYears;
+                        Log.Warning(
+                            $"[FasterRandomPlus][GenAgeWarning] Reroll #{randomRerollCounter}: " +
+                            $"Generated age (biological={bioYears}y, chronological={chronoYears}y) " +
+                            $"is outside the allowed range ({agePart.allowedAgeRange.min}-{agePart.allowedAgeRange.max}y). " +
+                            $"Pawn={pawn.LabelShort}, Context={req.Context}");
+                        continue;
                     }
                     
                     float effectiveMinAdult = minAgeForAdulthood;
@@ -187,17 +201,15 @@ namespace FasterRandomPlus.Source
                         }
                     }
                     
-                    
                     swAge.Stop();
                     totalAge += swAge.Elapsed.TotalMilliseconds;
-                    if (!CheckAgeIsSatisfied(pawn)) continue;
                     
-                    totalAge += swGene.Elapsed.TotalMilliseconds;
+                    if (!CheckAgeIsSatisfied(pawn)) continue;
                     
                     swTraits.Restart();
                     pawn.story.traits = new TraitSet(pawn);
                     genTraits?.Invoke(pawn, req);
-                    foreach (var part in Find.Scenario.AllParts.OfType<ScenPart_ForcedTrait>())
+                    foreach (var part in traitPart)
                         part.Notify_PawnGenerated(pawn, req.Context, false);
                     swTraits.Stop();
                     totalTraits += swTraits.Elapsed.TotalMilliseconds;
@@ -317,7 +329,11 @@ namespace FasterRandomPlus.Source
                         continue;
                     }
 
+                    swWork.Restart();
                     pawn.workSettings?.EnableAndInitialize();
+                    swWork.Stop();
+                    totalWork += swWork.Elapsed.TotalMilliseconds;
+                    
                     if (!CheckWorkIsSatisfied(pawn)) continue;
 
                     swHealth.Restart();
@@ -335,7 +351,7 @@ namespace FasterRandomPlus.Source
                         }
                     }
 
-                    foreach (var part in Find.Scenario.AllParts.OfType<ScenPart_ForcedHediff>())
+                    foreach (var part in hediffPart)
                         part.Notify_NewPawnGenerating(pawn, req.Context);
                     
                     swHealth.Stop();
@@ -343,6 +359,7 @@ namespace FasterRandomPlus.Source
 
                     if (!okHealth || !CheckHealthIsSatisfied(pawn)) continue;
 
+                    swPassion.Restart();
                     var disabledTags = pawn.story.DisabledWorkTagsBackstoryAndTraits;
                     var disabledWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
                         .Where(wt => (disabledTags & wt.workTags) != 0).ToList();
@@ -365,6 +382,8 @@ namespace FasterRandomPlus.Source
                             rec.Level = 0;
                         }
                     }
+                    swPassion.Stop();
+                    totalPassion += swPassion.Elapsed.TotalMilliseconds;
                     
                     swGene.Restart();
                     if (ModsConfig.BiotechActive)
@@ -375,6 +394,7 @@ namespace FasterRandomPlus.Source
                         genGenes?.Invoke(pawn, xen, req);
                     }
                     swGene.Stop();
+                    totalGene += swGene.Elapsed.TotalMilliseconds;
 
                     if (!CheckPawnIsSatisfied(pawn)) continue;
 
@@ -391,10 +411,16 @@ namespace FasterRandomPlus.Source
                     swRelations.Stop();
                     totalRelations += swRelations.Elapsed.TotalMilliseconds;
 
+                    swStyle.Restart();
                     genBodyType?.Invoke(pawn, req);
                     GeneratePawnStyle(pawn);
+                    swStyle.Stop();
+                    totalStyle += swStyle.Elapsed.TotalMilliseconds;
 
+                    swFinalNotify.Restart();
                     Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
+                    swFinalNotify.Stop();
+                    totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
                     
                     if (!CheckPawnIsSatisfied(pawn)) continue;
                     
@@ -421,25 +447,44 @@ namespace FasterRandomPlus.Source
             totalOverall += swTotal.Elapsed.TotalMilliseconds;
             countRuns++;
 
+            // //Debug Logging
             // Log.Message(
             //     $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
+            //     $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms,\n" + 
             //     $"Age: {totalAge:F1} ms, " +
             //     $"Traits: {totalTraits:F1} ms, " +
             //     $"Skills: {totalSkills:F1} ms,\n" +
             //     $"Health: {totalHealth:F1} ms, " +
             //     $"Gene: {totalGene:F1} ms,\n" +
+            //     $"Work: {totalWork:F1} ms, " +
+            //     $"passion: {totalPassion:F1} ms, " +
+            //     $"style: {totalStyle:F1} ms, " +
+            //     $"finalNotify: {totalFinalNotify:F1} ms,\n" +
             //     $"Redress: {totalRedress:F1} ms, " +
             //     $"Relations: {totalRelations:F1} ms, " + 
             //     $"Randomize: {totalRandomize:F1} ms" +
             //     $"Overall: {totalOverall:F1} ms\n" +
-            //     $"BioFailCount: {bioFailCount}" 
+            //     $"BioFailCount: {bioFailCount}" +
+            //     $"RerollCount: {randomRerollCounter}"
             // );
-
-            totalAge = totalTraits = totalSkills = totalHealth =
-                totalGene = totalRedress = totalRelations = totalOverall = 0;
+            totalAge = totalTraits = totalSkills = 
+                totalHealth = totalGene = 
+                    totalWork = totalPassion = totalStyle = totalFinalNotify = 
+                        totalRedress = totalRelations = totalRandomize = totalOverall = 0;
         }
 
         public static void ResetRerollCounter() => randomRerollCounter = 0;
+        
+        private static void SetRandomAgeInRange(Pawn pawn, IntRange ageRangeYears)
+        {
+            long minTicks = ageRangeYears.min * GenDate.TicksPerYear;
+            long maxTicks = ageRangeYears.max * GenDate.TicksPerYear;
+
+            long randomTicks = (long)Rand.Range(minTicks, maxTicks);
+
+            pawn.ageTracker.AgeBiologicalTicks = randomTicks;
+            pawn.ageTracker.AgeChronologicalTicks = randomTicks;
+        }
 
         private static bool CheckPawnIsSatisfied(Pawn pawn)
         {
