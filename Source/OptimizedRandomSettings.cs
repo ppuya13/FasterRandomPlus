@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using HarmonyLib;
 using RandomPlus;
 using RimWorld;
@@ -143,10 +144,19 @@ namespace FasterRandomPlus.Source
                 try
                 {
                     randomRerollCounter++;
-
+                    
                     swAge.Restart();
                     pawn.ageTracker = new Pawn_AgeTracker(pawn);
                     genAge?.Invoke(pawn, req);
+                    int ageCount = 0;
+                    foreach (var agePart in Find.Scenario.AllParts.OfType<ScenPart_PawnFilter_Age>())
+                    {
+                        while (!agePart.AllowPlayerStartingPawn(pawn, false, req) && ageCount < 1000)
+                        {
+                            genAge?.Invoke(pawn, req);
+                            ageCount++;
+                        }
+                    }
                     
                     float effectiveMinAdult = minAgeForAdulthood;
                     if (FasterRandomPlus.hasHAR)
@@ -184,10 +194,11 @@ namespace FasterRandomPlus.Source
                     
                     totalAge += swGene.Elapsed.TotalMilliseconds;
                     
-                    
                     swTraits.Restart();
                     pawn.story.traits = new TraitSet(pawn);
                     genTraits?.Invoke(pawn, req);
+                    foreach (var part in Find.Scenario.AllParts.OfType<ScenPart_ForcedTrait>())
+                        part.Notify_PawnGenerated(pawn, req.Context, false);
                     swTraits.Stop();
                     totalTraits += swTraits.Elapsed.TotalMilliseconds;
                     
@@ -305,7 +316,6 @@ namespace FasterRandomPlus.Source
 
                         continue;
                     }
-                    
 
                     pawn.workSettings?.EnableAndInitialize();
                     if (!CheckWorkIsSatisfied(pawn)) continue;
@@ -325,6 +335,9 @@ namespace FasterRandomPlus.Source
                         }
                     }
 
+                    foreach (var part in Find.Scenario.AllParts.OfType<ScenPart_ForcedHediff>())
+                        part.Notify_NewPawnGenerating(pawn, req.Context);
+                    
                     swHealth.Stop();
                     totalHealth += swHealth.Elapsed.TotalMilliseconds;
 
@@ -387,7 +400,7 @@ namespace FasterRandomPlus.Source
                 catch (Exception ex)
                 {
                     Log.Warning(
-                        $"RandomPlus: Error during reroll {randomRerollCounter}: {ex.Message}\n{ex.StackTrace}");
+                        $"[Faster RandomPlus] Error during reroll {randomRerollCounter}: {ex.Message}\n{ex.StackTrace}");
                     try
                     {
                         Find.WorldPawns.RemoveAndDiscardPawnViaGC(pawn);
