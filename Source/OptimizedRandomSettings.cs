@@ -395,6 +395,9 @@ namespace FasterRandomPlus.Source
                     GeneratePawnStyle(pawn);
 
                     Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
+                    
+                    if (!CheckPawnIsSatisfied(pawn)) continue;
+                    
                     break;
                 }
                 catch (Exception ex)
