@@ -194,8 +194,12 @@ namespace FasterRandomPlus.Source
                                 PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
                                 if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
                                 {
-                                    cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                    cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                                    if (BackstorySatisfiesIncapable(pawn.story.GetBackstory(BackstorySlot.Childhood),
+                                            pawn.story.GetBackstory(BackstorySlot.Adulthood))) 
+                                    {
+                                        cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                                        cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                                    }
                                 }
                             }
                         }
@@ -318,10 +322,14 @@ namespace FasterRandomPlus.Source
 
                             if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
                             {
-                                cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                                if (BackstorySatisfiesIncapable(pawn.story.GetBackstory(BackstorySlot.Childhood),
+                                        pawn.story.GetBackstory(BackstorySlot.Adulthood))) 
+                                {
+                                    cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                                    cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                                }
                             }
-
+                            
                             swRandomize.Stop();
                             totalRandomize += swRandomize.Elapsed.TotalMilliseconds;
                         }
@@ -333,8 +341,54 @@ namespace FasterRandomPlus.Source
                     pawn.workSettings?.EnableAndInitialize();
                     swWork.Stop();
                     totalWork += swWork.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckWorkIsSatisfied(pawn)) continue;
+
+                    if (!CheckWorkIsSatisfied(pawn))
+                    {
+                        if (pawnFilter.FilterIncapable != PawnFilter.IncapableOptions.AllowAll)
+                        {
+                            var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                            var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                            WorkTags disabledByBackstory = WorkTags.None;
+                            if (childBs != null)   disabledByBackstory |= childBs.workDisables;
+                            if (adultBs != null)   disabledByBackstory |= adultBs.workDisables;
+
+                            // Log.Message($"[FasterRandomPlus] Pawn={pawn.LabelShort}, " +
+                            //             $"Reroll#{randomRerollCounter}: Disabled Tag = {disabledByBackstory}");
+                            
+                            bool pass = false;
+                            switch (pawnFilter.FilterIncapable)
+                            {
+                                case PawnFilter.IncapableOptions.NoDumbLabor:
+                                    pass = (disabledByBackstory & WorkTags.ManualDumb) != WorkTags.ManualDumb;
+                                    break;
+                                case PawnFilter.IncapableOptions.AllowNone:
+                                    pass = disabledByBackstory == WorkTags.None;
+                                    break;
+                            }
+
+                            if (pass) continue;
+
+                            if (BackstorySatisfiesIncapable(cachedChildBs, cachedAdultBs))
+                            {
+                                pawn.story.Childhood = cachedChildBs;
+                                pawn.story.Adulthood = cachedAdultBs;
+                            }
+                            else
+                            {
+                                PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
+                                if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
+                                {
+                                    if (BackstorySatisfiesIncapable(pawn.story.GetBackstory(BackstorySlot.Childhood),
+                                            pawn.story.GetBackstory(BackstorySlot.Adulthood))) 
+                                    {
+                                        cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                                        cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                                    }
+                                }
+                            }
+                        }
+                        continue;
+                    }
 
                     swHealth.Restart();
                     bool okHealth = false;
@@ -484,6 +538,23 @@ namespace FasterRandomPlus.Source
 
             pawn.ageTracker.AgeBiologicalTicks = randomTicks;
             pawn.ageTracker.AgeChronologicalTicks = randomTicks;
+        }
+        
+        private static bool BackstorySatisfiesIncapable(BackstoryDef child, BackstoryDef adult)
+        {
+            WorkTags disabled = WorkTags.None;
+            if (child != null) disabled |= child.workDisables;
+            if (adult != null) disabled |= adult.workDisables;
+
+            switch (pawnFilter.FilterIncapable)
+            {
+                case PawnFilter.IncapableOptions.NoDumbLabor:
+                    return (disabled & WorkTags.ManualDumb) != WorkTags.ManualDumb;
+                case PawnFilter.IncapableOptions.AllowNone:
+                    return disabled == WorkTags.None;
+                default: //AllowAll
+                    return true;
+            }
         }
 
         private static bool CheckPawnIsSatisfied(Pawn pawn)
@@ -641,7 +712,7 @@ namespace FasterRandomPlus.Source
             switch (pawnFilter.FilterIncapable)
             {
                 case PawnFilter.IncapableOptions.NoDumbLabor:
-                    if ((pawn.story.DisabledWorkTagsBackstoryAndTraits & WorkTags.Violent) == WorkTags.Violent)
+                    if ((pawn.story.DisabledWorkTagsBackstoryAndTraits & WorkTags.ManualDumb) == WorkTags.ManualDumb)
                         return false;
                     break;
                 case PawnFilter.IncapableOptions.AllowNone:
