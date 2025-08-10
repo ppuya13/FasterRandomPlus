@@ -125,7 +125,7 @@ namespace FasterRandomPlus.Source
             SpouseRelationUtility.Notify_PawnRegenerated(pawn);
             pawn = StartingPawnUtility.RandomizeInPlace(pawn);
 
-            randomRerollCounter++;
+            // randomRerollCounter++;
             var req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
             req.ValidateAndFix();
             Faction faction = req.Faction
@@ -149,6 +149,7 @@ namespace FasterRandomPlus.Source
             swFirst.Stop();
             
             int bioFailCount = 0;
+            // int key = Environment.TickCount + randomRerollCounter;
             while (randomRerollCounter < PawnFilter.RerollLimit)
             {
                 try
@@ -496,6 +497,8 @@ namespace FasterRandomPlus.Source
                     }
                 }
             }
+
+            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, req);
             
             swTotal.Stop();
             totalOverall += swTotal.Elapsed.TotalMilliseconds;
