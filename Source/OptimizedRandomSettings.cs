@@ -23,6 +23,11 @@ namespace FasterRandomPlus.Source
         public static int randomRerollCounter = 0;
         public static List<PawnFilter> pawnFilterList = new List<PawnFilter>();
         private static PawnFilter pawnFilter;
+        public static PawnFilter PawnFilter
+        {
+            get => pawnFilter;
+            set => pawnFilter = value;
+        }
 
         private static readonly MethodInfo MiGeneratePawnRelations =
             typeof(PawnGenerator).GetMethod("GeneratePawnRelations", BindingFlags.NonPublic | BindingFlags.Static);
@@ -39,16 +44,11 @@ namespace FasterRandomPlus.Source
                 );
 
         public static bool SelectAny = false;
-
-        public static PawnFilter PawnFilter
-        {
-            get => pawnFilter;
-            set => pawnFilter = value;
-        }
         
         #region Stopwatch
 
         private static readonly Stopwatch swFirst = new Stopwatch();
+        private static readonly Stopwatch swGender = new Stopwatch();
         private static readonly Stopwatch swAge = new Stopwatch();
         private static readonly Stopwatch swRandomize =  new Stopwatch();
         private static readonly Stopwatch swTraits = new Stopwatch();
@@ -67,6 +67,7 @@ namespace FasterRandomPlus.Source
         private static double totalAge, totalTraits, totalHealth, totalGene;
         private static double totalSkills, totalRedress, totalRelations, totalOverall;
         private static double totalWork, totalPassion, totalStyle, totalFinalNotify;
+        private static double totalGender;
         private static int countRuns;
 
         #endregion
@@ -155,6 +156,26 @@ namespace FasterRandomPlus.Source
                 try
                 {
                     randomRerollCounter++;
+                    
+                    var oldGender = pawn.gender;
+                    
+                    pawn.gender =
+                        req.FixedGender
+                        ?? req.KindDef.fixedGender
+                        ?? (!pawn.RaceProps.hasGenders
+                            ? Gender.None
+                            : (pawn.RaceProps.forceGender != Gender.None
+                                ? pawn.RaceProps.forceGender
+                                : (Rand.Value >= 0.5f ? Gender.Female : Gender.Male)));
+
+                    swGender.Stop();
+                    totalGender += swGender.Elapsed.TotalMilliseconds; 
+                    
+                    if (pawn.RaceProps.Humanlike && oldGender != pawn.gender && !pawn.DevelopmentalStage.Baby())
+                        EnsureNameMatchesGender(pawn, faction, req, xen);
+                    
+                    
+                    if (!CheckGenderIsSatisfied(pawn)) continue;
                     
                     swAge.Restart();
                     pawn.ageTracker = new Pawn_AgeTracker(pawn);
@@ -507,7 +528,8 @@ namespace FasterRandomPlus.Source
             // //Debug Logging
             // Log.Message(
             //     $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
-            //     $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms,\n" + 
+            //     $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms,\n" +
+            //     $"Gender: {totalGender:F1} ms, " + 
             //     $"Age: {totalAge:F1} ms, " +
             //     $"Traits: {totalTraits:F1} ms, " +
             //     $"Skills: {totalSkills:F1} ms,\n" +
@@ -531,6 +553,33 @@ namespace FasterRandomPlus.Source
         }
 
         public static void ResetRerollCounter() => randomRerollCounter = 0;
+        
+        private static void EnsureNameMatchesGender(Pawn pawn, Faction faction, PawnGenerationRequest req, XenotypeDef xen)
+        {
+            try
+            {
+                if (!pawn.RaceProps.Humanlike || pawn.DevelopmentalStage.Baby()) return;
+
+                string forcedLast = req.FixedLastName;
+                if (pawn.Name is NameTriple nt && string.IsNullOrEmpty(forcedLast))
+                    forcedLast = nt.Last;
+
+                pawn.Name = PawnBioAndNameGenerator.GenerateFullPawnName(
+                    pawn.def,
+                    pawn.kindDef.GetNameMaker(pawn.gender),
+                    pawn.story,
+                    xen,
+                    pawn.RaceProps.GetNameGenerator(pawn.gender),
+                    pawn.Faction?.ideos?.PrimaryCulture,
+                    pawn.IsCreepJoiner,
+                    pawn.gender,
+                    pawn.RaceProps.nameCategory,
+                    forcedLast,
+                    false
+                );
+            }
+            catch { }
+        }
         
         private static void SetRandomAgeInRange(Pawn pawn, IntRange ageRangeYears)
         {
