@@ -636,37 +636,37 @@ namespace FasterRandomPlus.Source
 
                     #endregion
                     
-                    #region Final
-
-                    finalCount++;
-                    
-                    swRedress.Restart();
-                    PawnGenerator.RedressPawn(pawn, req);
-                    swRedress.Stop();
-                    totalRedress += swRedress.Elapsed.TotalMilliseconds;
-
-                    swRelations.Restart();
-                    bool oldFlag = FasterRandomPlus.isRerolling;
-                    FasterRandomPlus.isRerolling = false;
-                    MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
-                    FasterRandomPlus.isRerolling = oldFlag;
-                    swRelations.Stop();
-                    totalRelations += swRelations.Elapsed.TotalMilliseconds;
-
-                    swStyle.Restart();
-                    genBodyType?.Invoke(pawn, req);
-                    GeneratePawnStyle(pawn);
-                    swStyle.Stop();
-                    totalStyle += swStyle.Elapsed.TotalMilliseconds;
-
-                    swFinalNotify.Restart();
-                    Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
-                    swFinalNotify.Stop();
-                    totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
-
-                    if (!CheckPawnIsSatisfied(pawn)) continue;
-                    
-                    #endregion
+                    // #region Final
+                    //
+                    // finalCount++;
+                    //
+                    // swRedress.Restart();
+                    // PawnGenerator.RedressPawn(pawn, req);
+                    // swRedress.Stop();
+                    // totalRedress += swRedress.Elapsed.TotalMilliseconds;
+                    //
+                    // swRelations.Restart();
+                    // bool oldFlag = FasterRandomPlus.isRerolling;
+                    // FasterRandomPlus.isRerolling = false;
+                    // MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
+                    // FasterRandomPlus.isRerolling = oldFlag;
+                    // swRelations.Stop();
+                    // totalRelations += swRelations.Elapsed.TotalMilliseconds;
+                    //
+                    // swStyle.Restart();
+                    // genBodyType?.Invoke(pawn, req);
+                    // GeneratePawnStyle(pawn);
+                    // swStyle.Stop();
+                    // totalStyle += swStyle.Elapsed.TotalMilliseconds;
+                    //
+                    // swFinalNotify.Restart();
+                    // Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
+                    // swFinalNotify.Stop();
+                    // totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
+                    //
+                    // if (!CheckPawnIsSatisfied(pawn)) continue;
+                    //
+                    // #endregion
 
                     break;
                 }
@@ -686,6 +686,36 @@ namespace FasterRandomPlus.Source
                     }
                 }
             }
+            
+            #region Final
+
+            finalCount++;
+                    
+            swRedress.Restart();
+            PawnGenerator.RedressPawn(pawn, req);
+            swRedress.Stop();
+            totalRedress += swRedress.Elapsed.TotalMilliseconds;
+
+            swRelations.Restart();
+            bool oldFlag = FasterRandomPlus.isRerolling;
+            FasterRandomPlus.isRerolling = false;
+            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
+            FasterRandomPlus.isRerolling = oldFlag;
+            swRelations.Stop();
+            totalRelations += swRelations.Elapsed.TotalMilliseconds;
+
+            swStyle.Restart();
+            genBodyType?.Invoke(pawn, req);
+            GeneratePawnStyle(pawn);
+            swStyle.Stop();
+            totalStyle += swStyle.Elapsed.TotalMilliseconds;
+
+            swFinalNotify.Restart();
+            Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
+            swFinalNotify.Stop();
+            totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
+                    
+            #endregion
 
             if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, req);
 
@@ -694,27 +724,27 @@ namespace FasterRandomPlus.Source
             countRuns++;
 
             //Debug Logging
-            // Log.Message(
-            //     $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
-            //     $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms," +
-            //     $"Backstory Caching({cacheCount1}, {cacheCount2}): {swCaching.Elapsed.TotalMilliseconds:F1} ms,\n" +
-            //     $"Gender({genderCount}): {totalGender:F1} ms, " +
-            //     $"Age({ageCount}): {totalAge:F1} ms, " +
-            //     $"Traits({traitCount}): {totalTraits:F1} ms, " +
-            //     $"Skills({skillCount}): {totalSkills:F1} ms,\n" +
-            //     $"Health({healthCount}): {totalHealth:F1} ms, " +
-            //     $"Gene: {totalGene:F1} ms,\n" +
-            //     $"Work({workCount}): {totalWork:F1} ms, " +
-            //     $"passion({passionCount}): {totalPassion:F1} ms, " +
-            //     $"style: {totalStyle:F1} ms, " +
-            //     $"finalNotify({finalCount}): {totalFinalNotify:F1} ms,\n" +
-            //     $"Redress: {totalRedress:F1} ms, " +
-            //     $"Relations: {totalRelations:F1} ms, " +
-            //     $"Randomize: {totalRandomize:F1} ms, " +
-            //     $"Overall: {totalOverall:F1} ms,\n" +
-            //     $"BioFailCount: {bioFailCount}, " +
-            //     $"RerollCount: {randomRerollCounter}"
-            // );
+            Log.Message(
+                $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
+                $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms," +
+                $"Backstory Caching({cacheCount1}, {cacheCount2}): {swCaching.Elapsed.TotalMilliseconds:F1} ms,\n" +
+                $"Gender({genderCount}): {totalGender:F1} ms, " +
+                $"Age({ageCount}): {totalAge:F1} ms, " +
+                $"Traits({traitCount}): {totalTraits:F1} ms, " +
+                $"Skills({skillCount}): {totalSkills:F1} ms,\n" +
+                $"Health({healthCount}): {totalHealth:F1} ms, " +
+                $"Gene: {totalGene:F1} ms,\n" +
+                $"Work({workCount}): {totalWork:F1} ms, " +
+                $"passion({passionCount}): {totalPassion:F1} ms, " +
+                $"style: {totalStyle:F1} ms, " +
+                $"finalNotify({finalCount}): {totalFinalNotify:F1} ms,\n" +
+                $"Redress: {totalRedress:F1} ms, " +
+                $"Relations: {totalRelations:F1} ms, " +
+                $"Randomize: {totalRandomize:F1} ms, " +
+                $"Overall: {totalOverall:F1} ms,\n" +
+                $"BioFailCount: {bioFailCount}, " +
+                $"RerollCount: {randomRerollCounter}"
+            );
             totalAge = totalTraits = totalSkills =
                 totalHealth = totalGene = totalGender =
                     totalWork = totalPassion = totalStyle = totalFinalNotify =
