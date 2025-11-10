@@ -707,7 +707,6 @@ namespace FasterRandomPlus.Source
 
             swStyle.Restart();
             genBodyType?.Invoke(pawn, _req);
-            GeneratePawnStyle(pawn);
             if (Mismatch(pawn.gender, pawn.story.bodyType))
             {
                 var savedAdult = pawn.story.Adulthood;
@@ -720,6 +719,9 @@ namespace FasterRandomPlus.Source
                                           ? BodyTypeDefOf.Female
                                           : BodyTypeDefOf.Male);
             }
+            GeneratePawnStyle(pawn);
+            
+            
             swStyle.Stop();
             totalStyle += swStyle.Elapsed.TotalMilliseconds;
             
