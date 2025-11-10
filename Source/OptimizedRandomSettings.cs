@@ -25,6 +25,7 @@ namespace FasterRandomPlus.Source
         public static int randomRerollCounter = 0;
         public static List<PawnFilter> pawnFilterList = new List<PawnFilter>();
         private static PawnFilter pawnFilter;
+        private static PawnGenerationRequest _req;
 
         private static readonly MethodInfo MiGeneratePawnRelations =
             typeof(PawnGenerator).GetMethod("GeneratePawnRelations", BindingFlags.NonPublic | BindingFlags.Static);
@@ -130,11 +131,38 @@ namespace FasterRandomPlus.Source
             }
         }
 
-        public static void Reroll(int pawnIndex)
+        private static WorkTags requiredWorkTags;
+        private static List<Pawn> pawns;
+        private static Pawn pawn;
+        private static Faction faction;
+        private static BackstoryDef cachedChildBs;
+        private static BackstoryDef cachedAdultBs;
+        private static Dictionary<(XenotypeDef, Gender), Name> cachedName;
+        private static XenotypeDef xen;
+
+        private static ScenPart_PawnFilter_Age agePart;
+        private static ScenPart_ForcedTrait[] traitPart;
+        private static ScenPart_ForcedHediff[] hediffPart;
+        
+        static int bioFailCount = 0; //bioFail시 상승, 백스토리 변경 시 초기화
+        static int noPositiveGainCount = 0; //스킬 레벨 필터 불만족 시 스킬게인이 없는 백스토리일 경우 상승, 백스토리 변경 시 초기화
+        static int skillRerollCount = 0; //스킬 레벨 필터 불만족 시 상승, 스킬 레벨 필터에서 백스토리 변경 또는 다른 필터 불만족 시 초기화
+        static int cacheCount1 = 0;
+        static int cacheCount2 = 0;
+        static int genderCount = 0;
+        static int ageCount = 0;
+        static int traitCount = 0;
+        static int skillCount = 0;
+        static int workCount = 0;
+        static int healthCount = 0;
+        static int passionCount = 0;
+        static int finalCount = 0;
+        
+        public static void BeginReroll(int pawnIndex, int limit)
         {
             swTotal.Restart();
             
-            WorkTags requiredWorkTags = WorkTags.None;
+            requiredWorkTags = WorkTags.None;
             foreach (var tc in pawnFilter.Traits)
             {
                 var trait = tc?.trait;
@@ -159,319 +187,312 @@ namespace FasterRandomPlus.Source
             }
             
             swFirst.Restart();
-            var pawns = getStartingPawns();
-            Pawn pawn = pawns[pawnIndex];
+            pawns = getStartingPawns();
+            pawn = pawns[pawnIndex];
 
             SpouseRelationUtility.Notify_PawnRegenerated(pawn);
             pawn = StartingPawnUtility.RandomizeInPlace(pawn);
 
             // randomRerollCounter++;
-            PawnGenerationRequest req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
-            req.ValidateAndFix();
-            Faction faction = req.Faction
+            _req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
+            _req.ValidateAndFix();
+            faction = _req.Faction
                               ?? (!Find.FactionManager.TryGetRandomNonColonyHumanlikeFaction(out var tmp, false, true)
                                   ? Faction.OfAncients
                                   : tmp);
-            XenotypeDef xen = ModsConfig.BiotechActive
-                ? PawnGenerator.GetXenotypeForGeneratedPawn(req)
+            xen = ModsConfig.BiotechActive
+                ? PawnGenerator.GetXenotypeForGeneratedPawn(_req)
                 : null;
 
-            Find.Scenario.Notify_NewPawnGenerating(pawn, req.Context);
-            PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-            var cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-            var cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-            var cachedName = new Dictionary<(XenotypeDef, Gender), Name>();
+            Find.Scenario.Notify_NewPawnGenerating(pawn, _req.Context);
+            PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, _req, xen);
+            cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+            cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+            cachedName = new Dictionary<(XenotypeDef, Gender), Name>();
             cachedName[(pawn.genes.Xenotype, pawn.gender)] = pawn.Name;
 
-            var agePart = Find.Scenario.AllParts.OfType<ScenPart_PawnFilter_Age>().FirstOrDefault();
-            var traitPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedTrait>().ToArray();
-            var hediffPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedHediff>().ToArray();
+            agePart = Find.Scenario.AllParts.OfType<ScenPart_PawnFilter_Age>().FirstOrDefault();
+            traitPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedTrait>().ToArray();
+            hediffPart = Find.Scenario.AllParts.OfType<ScenPart_ForcedHediff>().ToArray();
             
             swFirst.Stop();
 
-            int bioFailCount = 0; //bioFail시 상승, 백스토리 변경 시 초기화
-            int noPositiveGainCount = 0; //스킬 레벨 필터 불만족 시 스킬게인이 없는 백스토리일 경우 상승, 백스토리 변경 시 초기화
-            int skillRerollCount = 0; //스킬 레벨 필터 불만족 시 상승, 스킬 레벨 필터에서 백스토리 변경 또는 다른 필터 불만족 시 초기화
-            // int key = Environment.TickCount + randomRerollCounter;
+            bioFailCount = noPositiveGainCount = skillRerollCount =
+                cacheCount1 = cacheCount2 = genderCount = ageCount =
+                    traitCount = skillCount = workCount = healthCount =
+                        passionCount = finalCount = 0;
+        }
 
-            int cacheCount1 = 0;
-            int cacheCount2 = 0;
-            int genderCount = 0;
-            int ageCount = 0;
-            int traitCount = 0;
-            int skillCount = 0;
-            int workCount = 0;
-            int healthCount = 0;
-            int passionCount = 0;
-            int finalCount = 0;
-
-            while (randomRerollCounter < PawnFilter.RerollLimit)
+        public static bool StepOnce()
+        {
+            try
             {
-                try
+                randomRerollCounter++;
+                if (randomRerollCounter > PawnFilter.RerollLimit) 
+                    return true;
+
+                #region Backstory
+
+                if (!CheckBackstoryIsSatisfied(cachedChildBs, cachedAdultBs, requiredWorkTags))
                 {
-                    randomRerollCounter++;
+                    cacheCount1++;
+                    skillRerollCount = 0;
+                    swCaching.Restart();
+                    PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, _req, xen);
+                    noPositiveGainCount = 0;
+                    cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                    cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                    swCaching.Stop();
+                    totalCaching += swCaching.Elapsed.TotalMilliseconds;
+                    return false;
+                }
 
-                    #region Backstory
-                    
-                    if (!CheckBackstoryIsSatisfied(cachedChildBs, cachedAdultBs, requiredWorkTags))
-                    {
-                        cacheCount1++;
-                        skillRerollCount = 0;
-                        swCaching.Restart();
-                        PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                        noPositiveGainCount = 0;
-                        cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                        cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                        swCaching.Stop();
-                        totalCaching += swCaching.Elapsed.TotalMilliseconds;
-                        continue;
-                    }
+                if (!CheckBackstoryIsSatisfied(pawn.story.GetBackstory(BackstorySlot.Childhood),
+                        pawn.story.GetBackstory(BackstorySlot.Adulthood), requiredWorkTags))
+                {
+                    cacheCount2++;
+                    pawn.story.Childhood = cachedChildBs;
+                    pawn.story.Adulthood = cachedAdultBs;
+                }
 
-                    if (!CheckBackstoryIsSatisfied(pawn.story.GetBackstory(BackstorySlot.Childhood),
-                            pawn.story.GetBackstory(BackstorySlot.Adulthood), requiredWorkTags)) 
+                if (IsAdult(pawn) && pawn.story.GetBackstory(BackstorySlot.Adulthood) == null)
+                {
+                    //성인인데 백스토리가 없는 경우 보정
+                    if (cachedAdultBs != null)
                     {
-                        cacheCount2++;
+                        //캐싱된 성인 백스토리가 있으면 덮어씀
                         pawn.story.Childhood = cachedChildBs;
                         pawn.story.Adulthood = cachedAdultBs;
                     }
-
-                    if (IsAdult(pawn) && pawn.story.GetBackstory(BackstorySlot.Adulthood) == null)
+                    else
                     {
-                        //성인인데 백스토리가 없는 경우 보정
-                        if (cachedAdultBs != null)
+                        //캐싱된 성인 백스토리가 없으면 셔플
+                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                        if (CheckBackstoryIsSatisfied(pawn.story.GetBackstory(BackstorySlot.Childhood),
+                                pawn.story.GetBackstory(BackstorySlot.Adulthood), requiredWorkTags))
                         {
-                            //캐싱된 성인 백스토리가 있으면 덮어씀
+                            //셔플 결과가 필터에 맞으면 새로 캐싱
+                            cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                            cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                        }
+                    }
+                }
+                else if (!IsAdult(pawn) && pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
+                {
+                    //어린이인데 성인 백스토리가 있는 경우 보정
+                    pawn.story.Adulthood = null;
+                }
+
+                #endregion
+
+                #region Gender
+
+                swGender.Restart();
+                var oldGender = pawn.gender;
+                pawn.gender =
+                    _req.FixedGender
+                    ?? _req.KindDef.fixedGender
+                    ?? (!pawn.RaceProps.hasGenders
+                        ? Gender.None
+                        : (pawn.RaceProps.forceGender != Gender.None
+                            ? pawn.RaceProps.forceGender
+                            : (Rand.Value >= 0.5f ? Gender.Female : Gender.Male)));
+
+                if (pawn.gender != oldGender)
+                {
+                    if (!cachedName.TryGetValue((pawn.genes.Xenotype, pawn.gender), out var name))
+                    {
+                        pawn.Name = PawnBioAndNameGenerator.GeneratePawnName(
+                            pawn, forcedLastName: _req.FixedLastName, xenotype: xen);
+                        cachedName[(pawn.genes.Xenotype, pawn.gender)] = pawn.Name;
+                    }
+                    else
+                    {
+                        pawn.Name = name;
+                    }
+                }
+
+                swGender.Stop();
+                totalGender += swGender.Elapsed.TotalMilliseconds;
+
+                if (!CheckGenderIsSatisfied(pawn))
+                {
+                    genderCount++;
+                    skillRerollCount = 0;
+                    return false;
+                }
+
+                #endregion
+
+                #region Age
+
+                swAge.Restart();
+                pawn.ageTracker = new Pawn_AgeTracker(pawn);
+                if (agePart != null) SetRandomAgeInRange(pawn, agePart.allowedAgeRange);
+                else genAge?.Invoke(pawn, _req);
+
+                if (agePart != null && !agePart.AllowPlayerStartingPawn(pawn, false, _req))
+                {
+                    int bioYears = pawn.ageTracker.AgeBiologicalYears;
+                    int chronoYears = pawn.ageTracker.AgeChronologicalYears;
+                    Log.Warning(
+                        $"[FasterRandomPlus][GenAgeWarning] Reroll #{randomRerollCounter}: " +
+                        $"Generated age (biological={bioYears}y, chronological={chronoYears}y) " +
+                        $"is outside the allowed range ({agePart.allowedAgeRange.min}-{agePart.allowedAgeRange.max}y). " +
+                        $"Pawn={pawn.LabelShort}, Context={_req.Context}");
+                    return false;
+                }
+
+                if (!IsAdult(pawn))
+                {
+                    pawn.story.Adulthood = null;
+                }
+                else
+                {
+                    if (pawn.story.GetBackstory(BackstorySlot.Adulthood) == null)
+                    {
+                        if (cachedAdultBs != null && cachedChildBs != null)
+                        {
                             pawn.story.Childhood = cachedChildBs;
                             pawn.story.Adulthood = cachedAdultBs;
                         }
                         else
                         {
-                            //캐싱된 성인 백스토리가 없으면 셔플
-                            SwapBackstoryWithShuffled(pawn, faction, req, xen);
-                            if (CheckBackstoryIsSatisfied(pawn.story.GetBackstory(BackstorySlot.Childhood),
-                                    pawn.story.GetBackstory(BackstorySlot.Adulthood), requiredWorkTags))
+                            // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
+                            SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                            noPositiveGainCount = 0;
+                            if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
                             {
-                                //셔플 결과가 필터에 맞으면 새로 캐싱
-                                cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                            }
-                        }
-                    }else if (!IsAdult(pawn) && pawn.story.GetBackstory(BackstorySlot.Adulthood) != null) 
-                    {
-                        //어린이인데 성인 백스토리가 있는 경우 보정
-                        pawn.story.Adulthood = null;
-                    }
-
-                    #endregion
-
-                    #region Gender
-
-                    swGender.Restart();
-                    var oldGender = pawn.gender;
-                    pawn.gender =
-                        req.FixedGender
-                        ?? req.KindDef.fixedGender
-                        ?? (!pawn.RaceProps.hasGenders
-                            ? Gender.None
-                            : (pawn.RaceProps.forceGender != Gender.None
-                                ? pawn.RaceProps.forceGender
-                                : (Rand.Value >= 0.5f ? Gender.Female : Gender.Male)));
-                    
-                    if (pawn.gender != oldGender)
-                    {
-                        if (!cachedName.TryGetValue((pawn.genes.Xenotype, pawn.gender), out var name))
-                        {
-                            pawn.Name = PawnBioAndNameGenerator.GeneratePawnName(
-                                pawn, forcedLastName: req.FixedLastName, xenotype: xen);
-                            cachedName[(pawn.genes.Xenotype, pawn.gender)] = pawn.Name;
-                        }
-                        else
-                        {
-                            pawn.Name = name;
-                        }
-                    }
-
-                    swGender.Stop();
-                    totalGender += swGender.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckGenderIsSatisfied(pawn))
-                    {
-                        genderCount++;
-                        skillRerollCount = 0;
-                        continue;
-                    }
-
-                    #endregion
-                    
-                    #region Age
-
-                    
-                    swAge.Restart();
-                    pawn.ageTracker = new Pawn_AgeTracker(pawn);
-                    if (agePart != null) SetRandomAgeInRange(pawn, agePart.allowedAgeRange);
-                    else genAge?.Invoke(pawn, req);
-
-                    if (agePart != null && !agePart.AllowPlayerStartingPawn(pawn, false, req))
-                    {
-                        int bioYears = pawn.ageTracker.AgeBiologicalYears;
-                        int chronoYears = pawn.ageTracker.AgeChronologicalYears;
-                        Log.Warning(
-                            $"[FasterRandomPlus][GenAgeWarning] Reroll #{randomRerollCounter}: " +
-                            $"Generated age (biological={bioYears}y, chronological={chronoYears}y) " +
-                            $"is outside the allowed range ({agePart.allowedAgeRange.min}-{agePart.allowedAgeRange.max}y). " +
-                            $"Pawn={pawn.LabelShort}, Context={req.Context}");
-                        continue;
-                    }
-
-                    if (!IsAdult(pawn))
-                    {
-                        pawn.story.Adulthood = null;
-                    }
-                    else
-                    {
-                        if (pawn.story.GetBackstory(BackstorySlot.Adulthood) == null)
-                        {
-                            if (cachedAdultBs != null && cachedChildBs != null)
-                            {
-                                pawn.story.Childhood = cachedChildBs;
-                                pawn.story.Adulthood = cachedAdultBs;
-                            }
-                            else
-                            {
-                                // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                                SwapBackstoryWithShuffled(pawn, faction, req, xen);
-                                noPositiveGainCount = 0;
-                                if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
+                                if (CheckBackstoryIsSatisfied(
+                                        pawn.story.GetBackstory(BackstorySlot.Childhood),
+                                        pawn.story.GetBackstory(BackstorySlot.Adulthood),
+                                        requiredWorkTags))
                                 {
-                                    if (CheckBackstoryIsSatisfied(
-                                            pawn.story.GetBackstory(BackstorySlot.Childhood),
-                                            pawn.story.GetBackstory(BackstorySlot.Adulthood),
-                                            requiredWorkTags))
-                                    {
-                                        cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                        cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                                    }
+                                    cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                                    cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
                                 }
                             }
                         }
                     }
+                }
 
-                    swAge.Stop();
-                    totalAge += swAge.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckAgeIsSatisfied(pawn))
+                swAge.Stop();
+                totalAge += swAge.Elapsed.TotalMilliseconds;
+
+                if (!CheckAgeIsSatisfied(pawn))
+                {
+                    ageCount++;
+                    skillRerollCount = 0;
+                    return false;
+                }
+
+                #endregion
+
+                #region Trait
+
+                swTraits.Restart();
+                pawn.story.traits = new TraitSet(pawn);
+                genTraits?.Invoke(pawn, _req);
+                foreach (var part in traitPart)
+                    part.Notify_PawnGenerated(pawn, _req.Context, false);
+                swTraits.Stop();
+                totalTraits += swTraits.Elapsed.TotalMilliseconds;
+
+                if (!CheckTraitsIsSatisfied(pawn, requiredWorkTags))
+                {
+                    traitCount++;
+                    skillRerollCount = 0;
+                    return false;
+                }
+
+                #endregion
+
+                #region Skill
+
+                swSkills.Restart();
+                pawn.skills = new Pawn_SkillTracker(pawn);
+                genSkills?.Invoke(pawn, _req);
+                swSkills.Stop();
+                totalSkills += swSkills.Elapsed.TotalMilliseconds;
+
+                if (!CheckSkillsIsSatisfied(pawn))
+                {
+                    skillCount++;
+                    skillRerollCount++;
+                    if (skillRerollCount > 100)
                     {
-                        ageCount++;
+                        // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
+                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
                         skillRerollCount = 0;
-                        continue;
+                        noPositiveGainCount = 0;
+                        return false;
                     }
 
-                    #endregion
+                    var combinedDisabledTags = pawn.story.DisabledWorkTagsBackstoryAndTraits;
 
-                    #region Trait
+                    var blockedWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
+                        .Where(wt => (combinedDisabledTags & wt.workTags) != WorkTags.None)
+                        .ToList();
 
-                    swTraits.Restart();
-                    pawn.story.traits = new TraitSet(pawn);
-                    genTraits?.Invoke(pawn, req);
-                    foreach (var part in traitPart)
-                        part.Notify_PawnGenerated(pawn, req.Context, false);
-                    swTraits.Stop();
-                    totalTraits += swTraits.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckTraitsIsSatisfied(pawn, requiredWorkTags))
+                    var activeSkillFilters = pawnFilter.Skills
+                        .Where(f =>
+                            f.MinValue > PawnFilter.SkillMinDefault
+                            || f.Passion != Passion.None);
+                    bool bioFail = activeSkillFilters.Any(f => //백스토리가 스킬 필터를 방해할 경우 true
                     {
-                        traitCount++;
-                        skillRerollCount = 0;
-                        continue;
-                    }
-                    
-                    #endregion
+                        var rec = pawn.skills.skills.FirstOrDefault(r => r.def == f.SkillDef);
+                        if (rec == null) return false;
 
-                    #region Skill
+                        bool disabled = rec.def.IsDisabled(combinedDisabledTags, blockedWorkTypes);
 
-                    swSkills.Restart();
-                    pawn.skills = new Pawn_SkillTracker(pawn);
-                    genSkills?.Invoke(pawn, req);
-                    swSkills.Stop();
-                    totalSkills += swSkills.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckSkillsIsSatisfied(pawn))
+                        var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                        var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                        bool reducedByBackstory = adultBs == null ||
+                                                  (childBs != null && childBs.skillGains.Any(sg =>
+                                                      sg.skill == f.SkillDef && sg.amount < 0)) ||
+                                                  adultBs.skillGains.Any(sg =>
+                                                      sg.skill == f.SkillDef && sg.amount < 0);
+
+                        return disabled || reducedByBackstory;
+                    });
+
+                    // if (randomRerollCounter > PawnFilter.RerollLimit - 10) 
+                    // {
+                    //     var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                    //     var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                    //     string childId = childBs != null ? childBs.title : "Nothing";
+                    //     string adultId = adultBs  != null ? adultBs.title  : "Nothing";
+                    //     StringBuilder debugLog = new StringBuilder();
+                    //     debugLog.Append(
+                    //         $"[{randomRerollCounter}] Backstory: Childhood={childId}, Adulthood={adultId}\n");
+                    //     
+                    //     var disabledTagsLog = pawn.story.DisabledWorkTagsBackstoryAndTraits;
+                    //     debugLog.Append(
+                    //         $"[{randomRerollCounter}] WorkTags: {disabledTagsLog}\n");
+                    //     
+                    //     var traits = pawn.story.traits.allTraits
+                    //         .Select(t => t.def.defName)
+                    //         .ToList();
+                    //     var traitList = traits.Select(t => $"\"{t}\"").ToList();
+                    //     debugLog.Append(
+                    //         $"[{randomRerollCounter}] Traits: {string.Join(", ", traitList)}\n");
+                    //     
+                    //     var skillLevels = pawn.skills.skills
+                    //         .Select(r => $"{r.def.defName}:{r.Level}")
+                    //         .ToList();
+                    //     var skillList = skillLevels.Select(t => $"\"{t}\"").ToList();
+                    //     debugLog.Append(
+                    //         $"[{randomRerollCounter}] Skill Levels: {string.Join(", ", skillList)}");
+                    //     Log.Message(debugLog.ToString());
+                    // }
+
+                    if (bioFail)
                     {
-                        skillCount++;
-                        skillRerollCount++;
-                        if (skillRerollCount > 100)
-                        {
-                            // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                            SwapBackstoryWithShuffled(pawn, faction, req, xen);
-                            skillRerollCount = 0;
-                            noPositiveGainCount = 0;
-                            continue;
-                        }
-                        
-                        var combinedDisabledTags = pawn.story.DisabledWorkTagsBackstoryAndTraits;
-                        
-                        var blockedWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
-                            .Where(wt => (combinedDisabledTags & wt.workTags) != WorkTags.None)
-                            .ToList();
-                        
-                        var activeSkillFilters = pawnFilter.Skills
-                            .Where(f =>
-                                f.MinValue > PawnFilter.SkillMinDefault
-                                || f.Passion != Passion.None);
-                        bool bioFail = activeSkillFilters.Any(f => //백스토리가 스킬 필터를 방해할 경우 true
-                        {
-                            var rec = pawn.skills.skills.FirstOrDefault(r => r.def == f.SkillDef);
-                            if (rec == null) return false;
-                        
-                            bool disabled = rec.def.IsDisabled(combinedDisabledTags, blockedWorkTypes);
-                        
-                            var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                            var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                            bool reducedByBackstory = adultBs == null ||
-                                                      (childBs != null && childBs.skillGains.Any(sg =>
-                                                          sg.skill == f.SkillDef && sg.amount < 0)) ||
-                                                      adultBs.skillGains.Any(sg =>
-                                                          sg.skill == f.SkillDef && sg.amount < 0);
-                        
-                            return disabled || reducedByBackstory;
-                        });
+                        bioFailCount++;
+                        swRandomize.Restart();
 
-                        // if (randomRerollCounter > PawnFilter.RerollLimit - 10) 
-                        // {
-                        //     var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                        //     var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                        //     string childId = childBs != null ? childBs.title : "Nothing";
-                        //     string adultId = adultBs  != null ? adultBs.title  : "Nothing";
-                        //     StringBuilder debugLog = new StringBuilder();
-                        //     debugLog.Append(
-                        //         $"[{randomRerollCounter}] Backstory: Childhood={childId}, Adulthood={adultId}\n");
-                        //     
-                        //     var disabledTagsLog = pawn.story.DisabledWorkTagsBackstoryAndTraits;
-                        //     debugLog.Append(
-                        //         $"[{randomRerollCounter}] WorkTags: {disabledTagsLog}\n");
-                        //     
-                        //     var traits = pawn.story.traits.allTraits
-                        //         .Select(t => t.def.defName)
-                        //         .ToList();
-                        //     var traitList = traits.Select(t => $"\"{t}\"").ToList();
-                        //     debugLog.Append(
-                        //         $"[{randomRerollCounter}] Traits: {string.Join(", ", traitList)}\n");
-                        //     
-                        //     var skillLevels = pawn.skills.skills
-                        //         .Select(r => $"{r.def.defName}:{r.Level}")
-                        //         .ToList();
-                        //     var skillList = skillLevels.Select(t => $"\"{t}\"").ToList();
-                        //     debugLog.Append(
-                        //         $"[{randomRerollCounter}] Skill Levels: {string.Join(", ", skillList)}");
-                        //     Log.Message(debugLog.ToString());
-                        // }
-                        
-                        if (bioFail)
-                        {
-                            bioFailCount++;
-                            swRandomize.Restart();
-                        
-                            bool backstoryConflictsWithSkillFilters = activeSkillFilters.Any(f => //bioFail의 원인이 백스토리인지 확인하기 위한 플래그
+                        bool backstoryConflictsWithSkillFilters =
+                            activeSkillFilters.Any(f => //bioFail의 원인이 백스토리인지 확인하기 위한 플래그
                             {
                                 var rec = pawn.skills.skills.FirstOrDefault(r => r.def == f.SkillDef);
                                 if (rec == null) return false;
@@ -485,177 +506,190 @@ namespace FasterRandomPlus.Source
                                         adultBs.skillGains.Any(sg => sg.skill == f.SkillDef && sg.amount < 0));
                                 return disabled || negByBackstory;
                             });
-                        
-                            if (backstoryConflictsWithSkillFilters)
-                            {
-                                //백스토리가 원인이면 셔플
-                                SwapBackstoryWithShuffled(pawn, faction, req, xen);
-                                var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                                if (CheckBackstoryIsSatisfied(childBs, adultBs, requiredWorkTags))
-                                {
-                                    cachedChildBs = childBs;
-                                    cachedAdultBs = adultBs;
-                                }
-                                skillRerollCount = 0;
-                                noPositiveGainCount = 0;
-                            }
-                        
-                            swRandomize.Stop();
-                            totalRandomize += swRandomize.Elapsed.TotalMilliseconds;
-                        }
-                        
-                        bool noPositiveGainForAny =
-                            activeSkillFilters.Any(f =>
-                            {
-                                var child = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                                var adult = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                                bool pos =
-                                    (child?.skillGains.Any(g => g.skill == f.SkillDef && g.amount > 0) == true) ||
-                                    (adult?.skillGains.Any(g => g.skill == f.SkillDef && g.amount > 0) == true);
-                                return !pos;
-                            });
-                        
-                        if (noPositiveGainForAny)
-                            noPositiveGainCount++;
 
-                        if (noPositiveGainCount >= 50)
+                        if (backstoryConflictsWithSkillFilters)
                         {
-                            // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                            SwapBackstoryWithShuffled(pawn, faction, req, xen);
-                            
+                            //백스토리가 원인이면 셔플
+                            SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                            var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                            var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                            if (CheckBackstoryIsSatisfied(childBs, adultBs, requiredWorkTags))
+                            {
+                                cachedChildBs = childBs;
+                                cachedAdultBs = adultBs;
+                            }
+
                             skillRerollCount = 0;
                             noPositiveGainCount = 0;
-                            cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
-                            cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
-                            
-                            // Log.Message("[FasterRandomPlus] 백스토리 스왑");
                         }
-                        
-                        continue;
+
+                        swRandomize.Stop();
+                        totalRandomize += swRandomize.Elapsed.TotalMilliseconds;
                     }
 
-                    #endregion
+                    bool noPositiveGainForAny =
+                        activeSkillFilters.Any(f =>
+                        {
+                            var child = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                            var adult = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+                            bool pos =
+                                (child?.skillGains.Any(g => g.skill == f.SkillDef && g.amount > 0) == true) ||
+                                (adult?.skillGains.Any(g => g.skill == f.SkillDef && g.amount > 0) == true);
+                            return !pos;
+                        });
 
-                    #region Work
+                    if (noPositiveGainForAny)
+                        noPositiveGainCount++;
 
-                    swWork.Restart();
-                    pawn.workSettings?.EnableAndInitialize();
-                    swWork.Stop();
-                    totalWork += swWork.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckWorkIsSatisfied(pawn))
+                    if (noPositiveGainCount >= 50)
                     {
-                        workCount++;
+                        // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
+                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+
                         skillRerollCount = 0;
-                        continue;
+                        noPositiveGainCount = 0;
+                        cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
+                        cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
+
+                        // Log.Message("[FasterRandomPlus] 백스토리 스왑");
                     }
 
-                    #endregion
-
-                    #region Health
-                    
-                    swHealth.Restart();
-                    bool okHealth = false;
-                    for (int h = 0; h < 100 && !okHealth; h++)
-                    {
-                        pawn.health.Reset();
-                        try
-                        {
-                            genHealth?.Invoke(pawn, req);
-                            okHealth = !pawn.Dead && !pawn.Destroyed && !pawn.Downed;
-                        }
-                        catch
-                        {
-                        }
-                    }
-
-                    foreach (var part in hediffPart)
-                        part.Notify_NewPawnGenerating(pawn, req.Context);
-                    
-                    swHealth.Stop();
-                    totalHealth += swHealth.Elapsed.TotalMilliseconds;
-                    
-                    //health
-                    if (!okHealth || !CheckHealthIsSatisfied(pawn))
-                    {
-                        healthCount++;
-                        skillRerollCount = 0;
-
-                        continue;
-                    }
-
-                    #endregion
-                    
-                    #region Passion, Gene
-                    
-                    passionCount++;
-                    swPassion.Restart();
-                    var disabledTags = pawn.story.DisabledWorkTagsBackstoryAndTraits;
-                    var disabledWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
-                        .Where(wt => (disabledTags & wt.workTags) != 0).ToList();
-                    var forcedPassionSkills =
-                        new HashSet<SkillDef>(pawn.story.traits.allTraits.SelectMany(tr => tr.def.forcedPassions));
-
-                    foreach (var rec in pawn.skills.skills)
-                    {
-                        if (pawn.story.traits.allTraits.Any(tr => tr.def.RequiresPassion(rec.def))
-                            && rec.passion == Passion.None)
-                        {
-                            rec.passion = forcedPassionSkills.Contains(rec.def)
-                                ? Passion.Major
-                                : Passion.Minor;
-                        }
-
-                        if (rec.def.IsDisabled(disabledTags, disabledWorkTypes))
-                        {
-                            rec.passion = Passion.None;
-                            rec.Level = 0;
-                        }
-                    }
-                    swPassion.Stop();
-                    totalPassion += swPassion.Elapsed.TotalMilliseconds;
-
-                    swGene.Restart();
-                    if (ModsConfig.BiotechActive)
-                    {
-                        pawn.genes = new Pawn_GeneTracker(pawn);
-                        pawn.genes.ClearXenogenes();
-                        pawn.genes.SetXenotype(xen);
-                        genGenes?.Invoke(pawn, xen, req);
-                    }
-
-                    swGene.Stop();
-                    totalGene += swGene.Elapsed.TotalMilliseconds;
-                    
-                    if (!CheckPawnIsSatisfied(pawn))
-                    {
-                        skillRerollCount = 0;
-                        continue;
-                    }
-
-                    #endregion
-
-                    break;
+                    return false;
                 }
-                catch (Exception ex)
+
+                #endregion
+
+                #region Work
+
+                swWork.Restart();
+                pawn.workSettings?.EnableAndInitialize();
+                swWork.Stop();
+                totalWork += swWork.Elapsed.TotalMilliseconds;
+
+                if (!CheckWorkIsSatisfied(pawn))
                 {
-                    Log.Warning(
-                        $"[Faster RandomPlus] Error during reroll {randomRerollCounter}: {ex.Message}\n{ex.StackTrace}");
+                    workCount++;
+                    skillRerollCount = 0;
+                    return false;
+                }
+
+                #endregion
+
+                #region Health
+
+                swHealth.Restart();
+                bool okHealth = false;
+                for (int h = 0; h < 100 && !okHealth; h++)
+                {
+                    pawn.health.Reset();
                     try
                     {
-                        Find.WorldPawns.RemoveAndDiscardPawnViaGC(pawn);
-                        SpouseRelationUtility.Notify_PawnRegenerated(pawn);
-                        // pawn = StartingPawnUtility.RandomizeInPlace(pawn);
+                        genHealth?.Invoke(pawn, _req);
+                        okHealth = !pawn.Dead && !pawn.Destroyed && !pawn.Downed;
                     }
                     catch
                     {
-                        break;
                     }
                 }
+
+                foreach (var part in hediffPart)
+                    part.Notify_NewPawnGenerating(pawn, _req.Context);
+
+                swHealth.Stop();
+                totalHealth += swHealth.Elapsed.TotalMilliseconds;
+
+                //health
+                if (!okHealth || !CheckHealthIsSatisfied(pawn))
+                {
+                    healthCount++;
+                    skillRerollCount = 0;
+
+                    return false;
+                }
+
+                #endregion
+
+                #region Passion, Gene
+
+                passionCount++;
+                swPassion.Restart();
+                var disabledTags = pawn.story.DisabledWorkTagsBackstoryAndTraits;
+                var disabledWorkTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading
+                    .Where(wt => (disabledTags & wt.workTags) != 0).ToList();
+                var forcedPassionSkills =
+                    new HashSet<SkillDef>(pawn.story.traits.allTraits.SelectMany(tr => tr.def.forcedPassions));
+
+                foreach (var rec in pawn.skills.skills)
+                {
+                    if (pawn.story.traits.allTraits.Any(tr => tr.def.RequiresPassion(rec.def))
+                        && rec.passion == Passion.None)
+                    {
+                        rec.passion = forcedPassionSkills.Contains(rec.def)
+                            ? Passion.Major
+                            : Passion.Minor;
+                    }
+
+                    if (rec.def.IsDisabled(disabledTags, disabledWorkTypes))
+                    {
+                        rec.passion = Passion.None;
+                        rec.Level = 0;
+                    }
+                }
+
+                swPassion.Stop();
+                totalPassion += swPassion.Elapsed.TotalMilliseconds;
+
+                swGene.Restart();
+                if (ModsConfig.BiotechActive)
+                {
+                    pawn.genes = new Pawn_GeneTracker(pawn);
+                    pawn.genes.ClearXenogenes();
+                    pawn.genes.SetXenotype(xen);
+                    genGenes?.Invoke(pawn, xen, _req);
+                }
+
+                swGene.Stop();
+                totalGene += swGene.Elapsed.TotalMilliseconds;
+
+                if (!CheckPawnIsSatisfied(pawn))
+                {
+                    skillRerollCount = 0;
+                    return false;
+                }
+                return true;
+
+                #endregion
+
+                // break;
             }
-            
-            #region Final
+            catch (Exception ex)
+            {
+                Log.Warning(
+                    $"[Faster RandomPlus] Error during reroll {randomRerollCounter}: {ex.Message}\n{ex.StackTrace}");
+                try
+                {
+                    Find.WorldPawns.RemoveAndDiscardPawnViaGC(pawn);
+                    SpouseRelationUtility.Notify_PawnRegenerated(pawn);
+                    // pawn = StartingPawnUtility.RandomizeInPlace(pawn);
+                }
+                catch
+                {
+                    // break;
+                }
+            }
+
+            // randomRerollCounter++;
+            if (randomRerollCounter >= PawnFilter.RerollLimit) return true;
+            return false;
+        }
+        
+        public static void AbortReroll()
+        {
+            // 취소
+        }
+        
+        public static void EndReroll()
+        {
             
             bool Mismatch(Gender g, BodyTypeDef bt)
                 => (g == Gender.Male && bt == BodyTypeDefOf.Female)
@@ -666,13 +700,13 @@ namespace FasterRandomPlus.Source
             swRelations.Restart();
             bool oldFlag = FasterRandomPlus.isRerolling;
             FasterRandomPlus.isRerolling = false;
-            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
+            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, _req });
             FasterRandomPlus.isRerolling = oldFlag;
             swRelations.Stop();
             totalRelations += swRelations.Elapsed.TotalMilliseconds;
 
             swStyle.Restart();
-            genBodyType?.Invoke(pawn, req);
+            genBodyType?.Invoke(pawn, _req);
             GeneratePawnStyle(pawn);
             if (Mismatch(pawn.gender, pawn.story.bodyType))
             {
@@ -690,18 +724,16 @@ namespace FasterRandomPlus.Source
             totalStyle += swStyle.Elapsed.TotalMilliseconds;
             
             swRedress.Restart();
-            PawnGenerator.RedressPawn(pawn, req);
+            PawnGenerator.RedressPawn(pawn, _req);
             swRedress.Stop();
             totalRedress += swRedress.Elapsed.TotalMilliseconds;
             
             swFinalNotify.Restart();
-            Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
+            Find.Scenario.Notify_PawnGenerated(pawn, _req.Context, true);
             swFinalNotify.Stop();
             totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
-                    
-            #endregion
 
-            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, req);
+            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, _req);
 
             swTotal.Stop();
             totalOverall += swTotal.Elapsed.TotalMilliseconds;
@@ -735,8 +767,9 @@ namespace FasterRandomPlus.Source
                         totalRedress = totalRelations = totalRandomize = totalOverall = 0;
         }
 
+
         public static void ResetRerollCounter() => randomRerollCounter = 0;
-        
+
         static WorkTags RequiredTagsFromSkill(SkillDef skill)
         {
             WorkTags tags = WorkTags.None;

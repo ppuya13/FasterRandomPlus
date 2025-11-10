@@ -62,6 +62,14 @@ namespace FasterRandomPlus
             var setupReqPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(SetupGenerationRequestPrefix));
             harmony.Patch(setupReq, new HarmonyMethod(setupReqPrefix));
 
+            var dpOrigin = AccessTools.Method(typeof(StartingPawnUtility), nameof(StartingPawnUtility.DrawPortraitArea));
+            var dpPostfix = AccessTools.Method(typeof(FasterRandomPlus), nameof(DrawPortraitArea_Postfix));
+            harmony.Patch(dpOrigin, postfix: new HarmonyMethod(dpPostfix));
+            
+            var dwcOrigin = AccessTools.Method(typeof(Page_ConfigureStartingPawns), "DoWindowContents");
+            var dwcPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(DoWindowContents_Prefix));
+            harmony.Patch(dwcOrigin, new HarmonyMethod(dwcPrefix));
+
             if (!hasHAR) return;
             
             var pick = AccessTools.Method("AlienRace.HarmonyPatches:PickStartingPawnConfig");
@@ -111,19 +119,20 @@ namespace FasterRandomPlus
                 OptimizedRandomSettings.PawnFilter = RandomSettings.PawnFilter;
                 OptimizedRandomSettings.ResetRerollCounter();
                 ResetPawnState(pawnIndex);
-                OptimizedRandomSettings.Reroll(pawnIndex);
+                // OptimizedRandomSettings.Reroll(pawnIndex);
+                RerollJob.Start(pawnIndex, OptimizedRandomSettings.PawnFilter.RerollLimit);
                 RandomSettings.randomRerollCounter = OptimizedRandomSettings.randomRerollCounter;
             }
             finally
             {
-                isRerolling = false;
+                // isRerolling = false;
                 sw.Stop();
                 
                 if(restoreUIRequest)
                     restoreUIRequest = false;
                 
-                Log.Message(
-                    $"[FasterRandomPlus] Optimized Reroll: {sw.Elapsed.TotalSeconds:F2}sec");
+                // Log.Message(
+                //     $"[FasterRandomPlus] Optimized Reroll: {sw.Elapsed.TotalSeconds:F2}sec");
             }
 
             return false;
@@ -239,6 +248,70 @@ namespace FasterRandomPlus
                 }
 
                 randomizeCallback = VanillaOnce;
+            }
+        }
+
+        public static void DrawPortraitArea_Postfix(
+            Rect rect,
+            int pawnIndex,
+            bool renderClothes,
+            bool renderHeadgear
+        )
+        {
+            if (!isRerolling) return;
+            
+            RerollJob.TickStep();
+            
+            Rect rectArea = rect;
+            rectArea.xMin -= 20f;
+            rectArea.xMax += 20f;
+            rectArea.yMin -= 20f;
+            rectArea.yMax += 20f;
+
+            Widgets.DrawWindowBackground(rectArea);
+
+            Widgets.ButtonInvisible(rectArea, doMouseoverSound: false);
+
+            float winW = Mathf.Min(rectArea.width - 60f, 520f);
+            float winH = 120f;
+            Rect win = new Rect(rectArea.center.x - winW / 2f, rectArea.center.y - winH / 2f, winW, winH);
+
+            Widgets.DrawShadowAround(win);
+            Widgets.DrawWindowBackground(win);
+
+            Rect inner = win.ContractedBy(14f);
+
+            var oldAnchor = Text.Anchor;
+            var oldFont = Text.Font;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Text.Font = GameFont.Medium;
+
+            Widgets.Label(inner, $"{OptimizedRandomSettings.randomRerollCounter}/{OptimizedRandomSettings.PawnFilter.RerollLimit} Rerolls...");
+
+            Text.Anchor = oldAnchor;
+            Text.Font = oldFont;
+        }
+
+
+        public static void DoWindowContents_Prefix(Page_ConfigureStartingPawns __instance, Rect rect)
+        {
+            if (!isRerolling) return;
+
+            var e = Event.current;
+            if (e == null) return;
+
+            if (!rect.Contains(e.mousePosition)) return;
+
+            switch (e.type)
+            {
+                case EventType.MouseDown:
+                case EventType.MouseUp:
+                case EventType.MouseDrag:
+                case EventType.ScrollWheel:
+                case EventType.KeyDown:
+                case EventType.ExecuteCommand:
+                    e.Use();
+                    break;
             }
         }
     }
