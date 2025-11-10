@@ -276,7 +276,7 @@ namespace FasterRandomPlus.Source
                             : (pawn.RaceProps.forceGender != Gender.None
                                 ? pawn.RaceProps.forceGender
                                 : (Rand.Value >= 0.5f ? Gender.Female : Gender.Male)));
-
+                    
                     if (pawn.gender != oldGender)
                     {
                         if (!cachedName.TryGetValue((pawn.genes.Xenotype, pawn.gender), out var name))
@@ -635,38 +635,6 @@ namespace FasterRandomPlus.Source
                     }
 
                     #endregion
-                    
-                    // #region Final
-                    //
-                    // finalCount++;
-                    //
-                    // swRedress.Restart();
-                    // PawnGenerator.RedressPawn(pawn, req);
-                    // swRedress.Stop();
-                    // totalRedress += swRedress.Elapsed.TotalMilliseconds;
-                    //
-                    // swRelations.Restart();
-                    // bool oldFlag = FasterRandomPlus.isRerolling;
-                    // FasterRandomPlus.isRerolling = false;
-                    // MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
-                    // FasterRandomPlus.isRerolling = oldFlag;
-                    // swRelations.Stop();
-                    // totalRelations += swRelations.Elapsed.TotalMilliseconds;
-                    //
-                    // swStyle.Restart();
-                    // genBodyType?.Invoke(pawn, req);
-                    // GeneratePawnStyle(pawn);
-                    // swStyle.Stop();
-                    // totalStyle += swStyle.Elapsed.TotalMilliseconds;
-                    //
-                    // swFinalNotify.Restart();
-                    // Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
-                    // swFinalNotify.Stop();
-                    // totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
-                    //
-                    // if (!CheckPawnIsSatisfied(pawn)) continue;
-                    //
-                    // #endregion
 
                     break;
                 }
@@ -688,13 +656,12 @@ namespace FasterRandomPlus.Source
             }
             
             #region Final
+            
+            bool Mismatch(Gender g, BodyTypeDef bt)
+                => (g == Gender.Male && bt == BodyTypeDefOf.Female)
+                   || (g == Gender.Female && bt == BodyTypeDefOf.Male);
 
             finalCount++;
-                    
-            swRedress.Restart();
-            PawnGenerator.RedressPawn(pawn, req);
-            swRedress.Stop();
-            totalRedress += swRedress.Elapsed.TotalMilliseconds;
 
             swRelations.Restart();
             bool oldFlag = FasterRandomPlus.isRerolling;
@@ -707,9 +674,26 @@ namespace FasterRandomPlus.Source
             swStyle.Restart();
             genBodyType?.Invoke(pawn, req);
             GeneratePawnStyle(pawn);
+            if (Mismatch(pawn.gender, pawn.story.bodyType))
+            {
+                var savedAdult = pawn.story.Adulthood;
+                pawn.story.Adulthood = null;
+                var fallback = PawnGenerator.GetBodyTypeFor(pawn);
+                pawn.story.Adulthood = savedAdult;
+
+                pawn.story.bodyType = fallback
+                                      ?? (pawn.gender == Gender.Female
+                                          ? BodyTypeDefOf.Female
+                                          : BodyTypeDefOf.Male);
+            }
             swStyle.Stop();
             totalStyle += swStyle.Elapsed.TotalMilliseconds;
-
+            
+            swRedress.Restart();
+            PawnGenerator.RedressPawn(pawn, req);
+            swRedress.Stop();
+            totalRedress += swRedress.Elapsed.TotalMilliseconds;
+            
             swFinalNotify.Restart();
             Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
             swFinalNotify.Stop();
@@ -724,27 +708,27 @@ namespace FasterRandomPlus.Source
             countRuns++;
 
             //Debug Logging
-            Log.Message(
-                $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
-                $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms," +
-                $"Backstory Caching({cacheCount1}, {cacheCount2}): {swCaching.Elapsed.TotalMilliseconds:F1} ms,\n" +
-                $"Gender({genderCount}): {totalGender:F1} ms, " +
-                $"Age({ageCount}): {totalAge:F1} ms, " +
-                $"Traits({traitCount}): {totalTraits:F1} ms, " +
-                $"Skills({skillCount}): {totalSkills:F1} ms,\n" +
-                $"Health({healthCount}): {totalHealth:F1} ms, " +
-                $"Gene: {totalGene:F1} ms,\n" +
-                $"Work({workCount}): {totalWork:F1} ms, " +
-                $"passion({passionCount}): {totalPassion:F1} ms, " +
-                $"style: {totalStyle:F1} ms, " +
-                $"finalNotify({finalCount}): {totalFinalNotify:F1} ms,\n" +
-                $"Redress: {totalRedress:F1} ms, " +
-                $"Relations: {totalRelations:F1} ms, " +
-                $"Randomize: {totalRandomize:F1} ms, " +
-                $"Overall: {totalOverall:F1} ms,\n" +
-                $"BioFailCount: {bioFailCount}, " +
-                $"RerollCount: {randomRerollCounter}"
-            );
+            // Log.Message(
+            //     $"[FasterRandomPlus] Reroll Complete #{randomRerollCounter}\n" +
+            //     $"First: {swFirst.Elapsed.TotalMilliseconds:F1} ms," +
+            //     $"Backstory Caching({cacheCount1}, {cacheCount2}): {swCaching.Elapsed.TotalMilliseconds:F1} ms,\n" +
+            //     $"Gender({genderCount}): {totalGender:F1} ms, " +
+            //     $"Age({ageCount}): {totalAge:F1} ms, " +
+            //     $"Traits({traitCount}): {totalTraits:F1} ms, " +
+            //     $"Skills({skillCount}): {totalSkills:F1} ms,\n" +
+            //     $"Health({healthCount}): {totalHealth:F1} ms, " +
+            //     $"Gene: {totalGene:F1} ms,\n" +
+            //     $"Work({workCount}): {totalWork:F1} ms, " +
+            //     $"passion({passionCount}): {totalPassion:F1} ms, " +
+            //     $"style: {totalStyle:F1} ms, " +
+            //     $"finalNotify({finalCount}): {totalFinalNotify:F1} ms,\n" +
+            //     $"Redress: {totalRedress:F1} ms, " +
+            //     $"Relations: {totalRelations:F1} ms, " +
+            //     $"Randomize: {totalRandomize:F1} ms, " +
+            //     $"Overall: {totalOverall:F1} ms,\n" +
+            //     $"BioFailCount: {bioFailCount}, " +
+            //     $"RerollCount: {randomRerollCounter}"
+            // );
             totalAge = totalTraits = totalSkills =
                 totalHealth = totalGene = totalGender =
                     totalWork = totalPassion = totalStyle = totalFinalNotify =
