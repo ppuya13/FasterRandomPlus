@@ -46,6 +46,7 @@ namespace FasterRandomPlus.Source
             if (State != RerollState.Running) return;
             State = RerollState.Cancelled;
             OptimizedRandomSettings.AbortReroll();
+            OptimizedRandomSettings.ClearCache();
             FasterRandomPlus.isRerolling = false;
             
             if (_totalSw != null && _totalSw.IsRunning)
@@ -58,6 +59,7 @@ namespace FasterRandomPlus.Source
         public static void End()
         {
             OptimizedRandomSettings.EndReroll();
+            OptimizedRandomSettings.ClearCache();
             State = RerollState.Completed;
             FasterRandomPlus.isRerolling = false;
             

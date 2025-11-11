@@ -772,6 +772,22 @@ namespace FasterRandomPlus.Source
 
         public static void ResetRerollCounter() => randomRerollCounter = 0;
 
+        public static void ClearCache()
+        {
+            cachedName?.Clear();
+            cachedName = null;
+            cachedChildBs = null;
+            cachedAdultBs = null;
+
+            pawn = null;
+            pawns = null;
+            faction = null;
+            xen = null;
+            agePart = null;
+            traitPart = null;
+            hediffPart = null;
+        }
+
         static WorkTags RequiredTagsFromSkill(SkillDef skill)
         {
             WorkTags tags = WorkTags.None;
