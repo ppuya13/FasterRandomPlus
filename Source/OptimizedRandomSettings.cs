@@ -14,6 +14,7 @@ namespace FasterRandomPlus.Source
 {
     public static class OptimizedRandomSettings
     {
+        private static bool endedByLimit;
         private static Action<Pawn, PawnGenerationRequest> genAge;
         private static Action<Pawn, PawnGenerationRequest> genTraits;
         private static Action<Pawn, PawnGenerationRequest> genSkills;
@@ -161,6 +162,7 @@ namespace FasterRandomPlus.Source
         public static void BeginReroll(int pawnIndex, int limit)
         {
             swTotal.Restart();
+            endedByLimit = false;
             
             requiredWorkTags = WorkTags.None;
             foreach (var tc in pawnFilter.Traits)
@@ -228,8 +230,11 @@ namespace FasterRandomPlus.Source
             try
             {
                 randomRerollCounter++;
-                if (randomRerollCounter > PawnFilter.RerollLimit) 
+                if (randomRerollCounter > PawnFilter.RerollLimit)
+                {
+                    endedByLimit = true;
                     return true;
+                }
 
                 #region Backstory
 
@@ -318,8 +323,7 @@ namespace FasterRandomPlus.Source
                 if (!CheckGenderIsSatisfied(pawn))
                 {
                     genderCount++;
-                    skillRerollCount = 0;
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
 
                 #endregion
@@ -340,7 +344,8 @@ namespace FasterRandomPlus.Source
                         $"Generated age (biological={bioYears}y, chronological={chronoYears}y) " +
                         $"is outside the allowed range ({agePart.allowedAgeRange.min}-{agePart.allowedAgeRange.max}y). " +
                         $"Pawn={pawn.LabelShort}, Context={_req.Context}");
-                    return false;
+                    ageCount++;
+                    return FinishOrContinueOnFailure();
                 }
 
                 if (!IsAdult(pawn))
@@ -382,8 +387,7 @@ namespace FasterRandomPlus.Source
                 if (!CheckAgeIsSatisfied(pawn))
                 {
                     ageCount++;
-                    skillRerollCount = 0;
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
 
                 #endregion
@@ -401,8 +405,7 @@ namespace FasterRandomPlus.Source
                 if (!CheckTraitsIsSatisfied(pawn, requiredWorkTags))
                 {
                     traitCount++;
-                    skillRerollCount = 0;
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
 
                 #endregion
@@ -569,8 +572,7 @@ namespace FasterRandomPlus.Source
                 if (!CheckWorkIsSatisfied(pawn))
                 {
                     workCount++;
-                    skillRerollCount = 0;
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
 
                 #endregion
@@ -602,9 +604,7 @@ namespace FasterRandomPlus.Source
                 if (!okHealth || !CheckHealthIsSatisfied(pawn))
                 {
                     healthCount++;
-                    skillRerollCount = 0;
-
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
 
                 #endregion
@@ -642,10 +642,7 @@ namespace FasterRandomPlus.Source
                 swGene.Restart();
                 if (ModsConfig.BiotechActive)
                 {
-                    pawn.genes = new Pawn_GeneTracker(pawn);
-                    pawn.genes.ClearXenogenes();
-                    pawn.genes.SetXenotype(xen);
-                    genGenes?.Invoke(pawn, xen, _req);
+                    RebuildGenesClean(pawn, xen, _req);
                 }
 
                 swGene.Stop();
@@ -653,8 +650,7 @@ namespace FasterRandomPlus.Source
 
                 if (!CheckPawnIsSatisfied(pawn))
                 {
-                    skillRerollCount = 0;
-                    return false;
+                    return FinishOrContinueOnFailure();
                 }
                 return true;
 
@@ -679,8 +675,7 @@ namespace FasterRandomPlus.Source
             }
 
             // randomRerollCounter++;
-            if (randomRerollCounter >= PawnFilter.RerollLimit) return true;
-            return false;
+            return FinishOrContinueOnFailure();
         }
         
         public static void AbortReroll()
@@ -696,6 +691,17 @@ namespace FasterRandomPlus.Source
                    || (g == Gender.Female && bt == BodyTypeDefOf.Male);
 
             finalCount++;
+            
+            if (endedByLimit)
+            {
+                swGene.Restart();
+                if (ModsConfig.BiotechActive)
+                {
+                    RebuildGenesClean(pawn, xen, _req);
+                }
+                swGene.Stop();
+                totalGene += swGene.Elapsed.TotalMilliseconds;
+            }
 
             swRelations.Restart();
             bool oldFlag = FasterRandomPlus.isRerolling;
@@ -720,14 +726,16 @@ namespace FasterRandomPlus.Source
                                           : BodyTypeDefOf.Male);
             }
             GeneratePawnStyle(pawn);
-            
-            
             swStyle.Stop();
             totalStyle += swStyle.Elapsed.TotalMilliseconds;
-            
-            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, _req);
+                        
+            if (endedByLimit)
+            {
+                genSkills?.Invoke(pawn, _req);
+            }
             
             swRedress.Restart();
+            InvalidateApparelRequirements(pawn);
             PawnGenerator.RedressPawn(pawn, _req);
             swRedress.Stop();
             totalRedress += swRedress.Elapsed.TotalMilliseconds;
@@ -841,13 +849,26 @@ namespace FasterRandomPlus.Source
 
         private static bool CheckPawnIsSatisfied(Pawn pawn)
         {
-            return randomRerollCounter >= pawnFilter.RerollLimit
-                   || (CheckGenderIsSatisfied(pawn)
-                       && CheckSkillsIsSatisfied(pawn)
-                       && CheckTraitsIsSatisfied(pawn, WorkTags.None)
-                       && CheckHealthIsSatisfied(pawn)
-                       && CheckWorkIsSatisfied(pawn)
-                       && CheckAgeIsSatisfied(pawn));
+            return CheckGenderIsSatisfied(pawn)
+                   && CheckSkillsIsSatisfied(pawn)
+                   && CheckTraitsIsSatisfied(pawn, WorkTags.None)
+                   && CheckHealthIsSatisfied(pawn)
+                   && CheckWorkIsSatisfied(pawn)
+                   && CheckAgeIsSatisfied(pawn);
+        }
+        
+        private static bool FinishOrContinueOnFailure()
+        {
+            skillRerollCount = 0;
+
+            if (randomRerollCounter >= PawnFilter.RerollLimit)
+            {
+                endedByLimit = true;
+                return true;
+            }
+
+            endedByLimit = false;
+            return false;
         }
 
         private static bool CheckAgeIsSatisfied(Pawn pawn)
@@ -1118,6 +1139,39 @@ namespace FasterRandomPlus.Source
                     faction.def
                 );
             }
+        }
+        
+        public static void RemoveAllGenesWithSideEffects(Pawn pawn)
+        {
+            if (!ModsConfig.BiotechActive || pawn?.genes == null) return;
+
+            var genes = pawn.genes.GenesListForReading.ToList();
+            for (int i = genes.Count - 1; i >= 0; i--)
+            {
+                pawn.genes.RemoveGene(genes[i]);
+            }
+        }
+
+        private static void RebuildGenesClean(Pawn pawn, XenotypeDef xenotype, PawnGenerationRequest req)
+        {
+            if (!ModsConfig.BiotechActive || pawn == null) return;
+
+            RemoveAllGenesWithSideEffects(pawn);
+
+            pawn.genes = new Pawn_GeneTracker(pawn);
+
+            genGenes?.Invoke(pawn, xenotype, req);
+
+            pawn.story?.traits?.RecalculateSuppression();
+        }
+
+        private static void InvalidateApparelRequirements(Pawn pawn)
+        {
+            if (pawn?.apparel == null) return;
+
+            pawn.apparel.Notify_IdeoChanged();
+            pawn.apparel.Notify_RoleChanged();
+            pawn.apparel.Notify_TitleChanged();
         }
     }
 }

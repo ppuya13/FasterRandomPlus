@@ -157,7 +157,11 @@ namespace FasterRandomPlus
             pawn.story.traits.allTraits.Clear();
             pawn.skills = new Pawn_SkillTracker(pawn);
             pawn.workSettings?.EnableAndInitialize();
-            if (ModsConfig.BiotechActive) pawn.genes = new Pawn_GeneTracker(pawn);
+            if (ModsConfig.BiotechActive)
+            {
+                OptimizedRandomSettings.RemoveAllGenesWithSideEffects(pawn);
+                pawn.genes = new Pawn_GeneTracker(pawn);
+            }
 
             RandomSettings.GeneratePawnStyle(pawn);
         }
