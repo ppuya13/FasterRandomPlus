@@ -725,17 +725,19 @@ namespace FasterRandomPlus.Source
             swStyle.Stop();
             totalStyle += swStyle.Elapsed.TotalMilliseconds;
             
+            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, _req);
+            
             swRedress.Restart();
             PawnGenerator.RedressPawn(pawn, _req);
             swRedress.Stop();
             totalRedress += swRedress.Elapsed.TotalMilliseconds;
             
+            StartingPawnUtility.GeneratePossessions(pawn);
+            
             swFinalNotify.Restart();
             Find.Scenario.Notify_PawnGenerated(pawn, _req.Context, true);
             swFinalNotify.Stop();
             totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
-
-            if (randomRerollCounter >= PawnFilter.RerollLimit) genSkills?.Invoke(pawn, _req);
 
             swTotal.Stop();
             totalOverall += swTotal.Elapsed.TotalMilliseconds;
