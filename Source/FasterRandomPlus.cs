@@ -47,7 +47,7 @@ namespace FasterRandomPlus
             OptimizedRandomSettings.Init();
             
             PatchRerollLimitOptionValues();
-
+            
             var drlOrigin = AccessTools.Method(typeof(PanelOthers), "drawRerollLimit");
             var drlPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(drawRerollLimit_Prefix));
             harmony.Patch(drlOrigin, new HarmonyMethod(drlPrefix));
@@ -88,7 +88,7 @@ namespace FasterRandomPlus
             
         }
         
-        public static bool RerollPrefix(int pawnIndex)
+        static bool RerollPrefix(int pawnIndex)
         {
             int thisFrame = Time.frameCount;
             if (lastRerollFrame != thisFrame)
@@ -162,12 +162,12 @@ namespace FasterRandomPlus
             RandomSettings.GeneratePawnStyle(pawn);
         }
         
-        public static bool SkipGeneratePawnRelations(Pawn pawn, ref PawnGenerationRequest request)
+        static bool SkipGeneratePawnRelations(Pawn pawn, ref PawnGenerationRequest request)
         {
             return !isRerolling;
         }
 
-        public static bool SetGenerationRequestPrefix(ref PawnGenerationRequest request)
+        static bool SetGenerationRequestPrefix(ref PawnGenerationRequest request)
         {
             if (restoreUIRequest)
             {
@@ -204,7 +204,7 @@ namespace FasterRandomPlus
             return true;
         }
         
-        public static bool GetXenotypeForGeneratedPawnPrefix(
+        static bool GetXenotypeForGeneratedPawnPrefix(
             PawnGenerationRequest request,
             ref XenotypeDef __result)
         {
@@ -258,7 +258,7 @@ namespace FasterRandomPlus
             }
         }
 
-        public static void DrawPortraitArea_Postfix(
+        static void DrawPortraitArea_Postfix(
             Rect rect,
             int pawnIndex,
             bool renderClothes,
@@ -300,7 +300,7 @@ namespace FasterRandomPlus
         }
 
 
-        public static void DoWindowContents_Prefix(Page_ConfigureStartingPawns __instance, Rect rect)
+        static void DoWindowContents_Prefix(Page_ConfigureStartingPawns __instance, Rect rect)
         {
             if (!isRerolling) return;
 
@@ -325,11 +325,6 @@ namespace FasterRandomPlus
         static void PatchRerollLimitOptionValues()
         {
             var fi = AccessTools.Field(typeof(PawnFilter), nameof(PawnFilter.RerollLimitOptionValues));
-            if (fi == null)
-            {
-                Log.Error("[FasterRandomPlus] Field not found: PawnFilter.RerollLimitOptionValues");
-                return;
-            }
 
             var current = fi.GetValue(null) as string[];
             if (current == null)
