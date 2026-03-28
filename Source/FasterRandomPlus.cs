@@ -46,6 +46,12 @@ namespace FasterRandomPlus
             
             OptimizedRandomSettings.Init();
             
+            PatchRerollLimitOptionValues();
+
+            var drlOrigin = AccessTools.Method(typeof(PanelOthers), "drawRerollLimit");
+            var drlPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(drawRerollLimit_Prefix));
+            harmony.Patch(drlOrigin, new HarmonyMethod(drlPrefix));
+            
             var gpRelOrigin = AccessTools.Method(typeof(PawnGenerator), "GeneratePawnRelations", new[] { typeof(Pawn), typeof(PawnGenerationRequest).MakeByRefType() });
             var rpRelPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(SkipGeneratePawnRelations));
             harmony.Patch( gpRelOrigin, new HarmonyMethod(rpRelPrefix) );
@@ -79,6 +85,7 @@ namespace FasterRandomPlus
             var getGen = AccessTools.Method(typeof(PawnGenerator), nameof(PawnGenerator.GetXenotypeForGeneratedPawn));
             var getGenPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(GetXenotypeForGeneratedPawnPrefix));
             harmony.Patch(getGen, new HarmonyMethod(getGenPrefix));
+            
         }
         
         public static bool RerollPrefix(int pawnIndex)
@@ -313,6 +320,58 @@ namespace FasterRandomPlus
                     e.Use();
                     break;
             }
+        }
+
+        static void PatchRerollLimitOptionValues()
+        {
+            var fi = AccessTools.Field(typeof(PawnFilter), nameof(PawnFilter.RerollLimitOptionValues));
+            if (fi == null)
+            {
+                Log.Error("[FasterRandomPlus] Field not found: PawnFilter.RerollLimitOptionValues");
+                return;
+            }
+
+            var current = fi.GetValue(null) as string[];
+            if (current == null)
+            {
+                Log.Error("[FasterRandomPlus] RerollLimitOptionValues is null");
+                return;
+            }
+
+            var patched = current
+                .Concat(new[]
+                {
+                    "100000",
+                    "250000",
+                    "500000"
+                })
+                .Distinct()
+                .ToArray();
+            fi.SetValue(null, patched);
+        }
+        
+        static bool drawRerollLimit_Prefix(PanelOthers __instance, Rect rect)
+        {
+            var current = RandomSettings.PawnFilter.RerollLimit.ToString();
+
+            if (!Widgets.ButtonText(rect, current))
+                return false;
+
+            var options = new List<FloatMenuOption>();
+
+            foreach (var val in PawnFilter.RerollLimitOptionValues)
+            {
+                string label = val;
+
+                options.Add(new FloatMenuOption(label, () =>
+                {
+                    RandomSettings.PawnFilter.RerollLimit = int.Parse(val);
+                }));
+            }
+
+            Find.WindowStack.Add(new FloatMenu(options));
+
+            return false;
         }
     }
 }
