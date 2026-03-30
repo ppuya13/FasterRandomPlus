@@ -26,7 +26,7 @@ namespace FasterRandomPlus.Source
         public static int randomRerollCounter = 0;
         public static List<PawnFilter> pawnFilterList = new List<PawnFilter>();
         private static PawnFilter pawnFilter;
-        private static PawnGenerationRequest _req;
+        private static PawnGenerationRequest req;
 
         private static readonly MethodInfo MiGeneratePawnRelations =
             typeof(PawnGenerator).GetMethod("GeneratePawnRelations", BindingFlags.NonPublic | BindingFlags.Static);
@@ -59,8 +59,36 @@ namespace FasterRandomPlus.Source
         static readonly BackstoryCategoryFilter FRP_FallbackCategoryGroup = new BackstoryCategoryFilter {
             categories = new List<string> { "Civil" }, commonality = 1f
         };
+
+        private static WorkTags requiredWorkTags;
+        private static List<Pawn> pawns;
+        private static Pawn pawn;
+        private static Faction faction;
+        private static BackstoryDef cachedChildBs;
+        private static BackstoryDef cachedAdultBs;
+        private static Dictionary<(XenotypeDef, Gender), Name> cachedName;
+        private static XenotypeDef xen;
+
+        private static ScenPart_PawnFilter_Age agePart;
+        private static ScenPart_ForcedTrait[] traitPart;
+        private static ScenPart_ForcedHediff[] hediffPart;
         
-        #region Stopwatch
+        #region Debug
+        
+        static int bioFailCount = 0; //bioFail시 상승, 백스토리 변경 시 초기화
+        static int noPositiveGainCount = 0; //스킬 레벨 필터 불만족 시 스킬게인이 없는 백스토리일 경우 상승, 백스토리 변경 시 초기화
+        static int skillRerollCount = 0; //스킬 레벨 필터 불만족 시 상승, 스킬 레벨 필터에서 백스토리 변경 또는 다른 필터 불만족 시 초기화
+        static int cacheCount1 = 0;
+        static int cacheCount2 = 0;
+        static int genderCount = 0;
+        static int ageCount = 0;
+        static int traitCount = 0;
+        static int skillCount = 0;
+        static int abilitiesCount = 0;
+        static int workCount = 0;
+        static int healthCount = 0;
+        static int passionCount = 0;
+        static int finalCount = 0;
 
         private static readonly Stopwatch swFirst = new Stopwatch();
         private static readonly Stopwatch swCaching = new Stopwatch();
@@ -71,6 +99,7 @@ namespace FasterRandomPlus.Source
         private static readonly Stopwatch swHealth = new Stopwatch();
         private static readonly Stopwatch swGene = new Stopwatch();
         private static readonly Stopwatch swSkills = new Stopwatch();
+        private static readonly Stopwatch swAbilities = new Stopwatch();
         private static readonly Stopwatch swRedress = new Stopwatch();
         private static readonly Stopwatch swRelations = new Stopwatch();
         private static readonly Stopwatch swWork = new Stopwatch();
@@ -83,7 +112,7 @@ namespace FasterRandomPlus.Source
         private static double totalAge, totalTraits, totalHealth, totalGene;
         private static double totalSkills, totalRedress, totalRelations, totalOverall;
         private static double totalWork, totalPassion, totalStyle, totalFinalNotify;
-        private static double totalGender;
+        private static double totalAbilities, totalGender;
         private static int countRuns;
 
         #endregion
@@ -131,33 +160,6 @@ namespace FasterRandomPlus.Source
                 Log.Error("RandomPlus: Failed to init delegates: " + ex.Message);
             }
         }
-
-        private static WorkTags requiredWorkTags;
-        private static List<Pawn> pawns;
-        private static Pawn pawn;
-        private static Faction faction;
-        private static BackstoryDef cachedChildBs;
-        private static BackstoryDef cachedAdultBs;
-        private static Dictionary<(XenotypeDef, Gender), Name> cachedName;
-        private static XenotypeDef xen;
-
-        private static ScenPart_PawnFilter_Age agePart;
-        private static ScenPart_ForcedTrait[] traitPart;
-        private static ScenPart_ForcedHediff[] hediffPart;
-        
-        static int bioFailCount = 0; //bioFail시 상승, 백스토리 변경 시 초기화
-        static int noPositiveGainCount = 0; //스킬 레벨 필터 불만족 시 스킬게인이 없는 백스토리일 경우 상승, 백스토리 변경 시 초기화
-        static int skillRerollCount = 0; //스킬 레벨 필터 불만족 시 상승, 스킬 레벨 필터에서 백스토리 변경 또는 다른 필터 불만족 시 초기화
-        static int cacheCount1 = 0;
-        static int cacheCount2 = 0;
-        static int genderCount = 0;
-        static int ageCount = 0;
-        static int traitCount = 0;
-        static int skillCount = 0;
-        static int workCount = 0;
-        static int healthCount = 0;
-        static int passionCount = 0;
-        static int finalCount = 0;
         
         public static void BeginReroll(int pawnIndex, int limit)
         {
@@ -196,18 +198,18 @@ namespace FasterRandomPlus.Source
             pawn = StartingPawnUtility.RandomizeInPlace(pawn);
 
             // randomRerollCounter++;
-            _req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
-            _req.ValidateAndFix();
-            faction = _req.Faction
+            req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
+            req.ValidateAndFix();
+            faction = req.Faction
                               ?? (!Find.FactionManager.TryGetRandomNonColonyHumanlikeFaction(out var tmp, false, true)
                                   ? Faction.OfAncients
                                   : tmp);
             xen = ModsConfig.BiotechActive
-                ? PawnGenerator.GetXenotypeForGeneratedPawn(_req)
+                ? PawnGenerator.GetXenotypeForGeneratedPawn(req)
                 : null;
 
-            Find.Scenario.Notify_NewPawnGenerating(pawn, _req.Context);
-            PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, _req, xen);
+            Find.Scenario.Notify_NewPawnGenerating(pawn, req.Context);
+            PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
             cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
             cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
             cachedName = new Dictionary<(XenotypeDef, Gender), Name>();
@@ -219,10 +221,10 @@ namespace FasterRandomPlus.Source
             
             swFirst.Stop();
 
-            bioFailCount = noPositiveGainCount = skillRerollCount =
-                cacheCount1 = cacheCount2 = genderCount = ageCount =
-                    traitCount = skillCount = workCount = healthCount =
-                        passionCount = finalCount = 0;
+            totalAge = totalTraits = totalSkills =
+                totalHealth = totalGene = totalGender = totalAbilities =
+                    totalWork = totalPassion = totalStyle = totalFinalNotify =
+                        totalRedress = totalRelations = totalRandomize = totalOverall = 0;
         }
 
         public static bool StepOnce()
@@ -243,7 +245,7 @@ namespace FasterRandomPlus.Source
                     cacheCount1++;
                     skillRerollCount = 0;
                     swCaching.Restart();
-                    PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, _req, xen);
+                    PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
                     noPositiveGainCount = 0;
                     cachedChildBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
                     cachedAdultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
@@ -272,7 +274,7 @@ namespace FasterRandomPlus.Source
                     else
                     {
                         //캐싱된 성인 백스토리가 없으면 셔플
-                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                        SwapBackstoryWithShuffled(pawn, faction, req, xen);
                         if (CheckBackstoryIsSatisfied(pawn.story.GetBackstory(BackstorySlot.Childhood),
                                 pawn.story.GetBackstory(BackstorySlot.Adulthood), requiredWorkTags))
                         {
@@ -295,8 +297,8 @@ namespace FasterRandomPlus.Source
                 swGender.Restart();
                 var oldGender = pawn.gender;
                 pawn.gender =
-                    _req.FixedGender
-                    ?? _req.KindDef.fixedGender
+                    req.FixedGender
+                    ?? req.KindDef.fixedGender
                     ?? (!pawn.RaceProps.hasGenders
                         ? Gender.None
                         : (pawn.RaceProps.forceGender != Gender.None
@@ -308,7 +310,7 @@ namespace FasterRandomPlus.Source
                     if (!cachedName.TryGetValue((pawn.genes.Xenotype, pawn.gender), out var name))
                     {
                         pawn.Name = PawnBioAndNameGenerator.GeneratePawnName(
-                            pawn, forcedLastName: _req.FixedLastName, xenotype: xen);
+                            pawn, forcedLastName: req.FixedLastName, xenotype: xen);
                         cachedName[(pawn.genes.Xenotype, pawn.gender)] = pawn.Name;
                     }
                     else
@@ -333,9 +335,9 @@ namespace FasterRandomPlus.Source
                 swAge.Restart();
                 pawn.ageTracker = new Pawn_AgeTracker(pawn);
                 if (agePart != null) SetRandomAgeInRange(pawn, agePart.allowedAgeRange);
-                else genAge?.Invoke(pawn, _req);
+                else genAge?.Invoke(pawn, req);
 
-                if (agePart != null && !agePart.AllowPlayerStartingPawn(pawn, false, _req))
+                if (agePart != null && !agePart.AllowPlayerStartingPawn(pawn, false, req))
                 {
                     int bioYears = pawn.ageTracker.AgeBiologicalYears;
                     int chronoYears = pawn.ageTracker.AgeChronologicalYears;
@@ -343,7 +345,7 @@ namespace FasterRandomPlus.Source
                         $"[FasterRandomPlus][GenAgeWarning] Reroll #{randomRerollCounter}: " +
                         $"Generated age (biological={bioYears}y, chronological={chronoYears}y) " +
                         $"is outside the allowed range ({agePart.allowedAgeRange.min}-{agePart.allowedAgeRange.max}y). " +
-                        $"Pawn={pawn.LabelShort}, Context={_req.Context}");
+                        $"Pawn={pawn.LabelShort}, Context={req.Context}");
                     ageCount++;
                     return FinishOrContinueOnFailure();
                 }
@@ -364,7 +366,7 @@ namespace FasterRandomPlus.Source
                         else
                         {
                             // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                            SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                            SwapBackstoryWithShuffled(pawn, faction, req, xen);
                             noPositiveGainCount = 0;
                             if (pawn.story.GetBackstory(BackstorySlot.Adulthood) != null)
                             {
@@ -396,9 +398,9 @@ namespace FasterRandomPlus.Source
 
                 swTraits.Restart();
                 pawn.story.traits = new TraitSet(pawn);
-                genTraits?.Invoke(pawn, _req);
+                genTraits?.Invoke(pawn, req);
                 foreach (var part in traitPart)
-                    part.Notify_PawnGenerated(pawn, _req.Context, false);
+                    part.Notify_PawnGenerated(pawn, req.Context, false);
                 swTraits.Stop();
                 totalTraits += swTraits.Elapsed.TotalMilliseconds;
 
@@ -414,7 +416,7 @@ namespace FasterRandomPlus.Source
 
                 swSkills.Restart();
                 pawn.skills = new Pawn_SkillTracker(pawn);
-                genSkills?.Invoke(pawn, _req);
+                genSkills?.Invoke(pawn, req);
                 swSkills.Stop();
                 totalSkills += swSkills.Elapsed.TotalMilliseconds;
 
@@ -425,7 +427,7 @@ namespace FasterRandomPlus.Source
                     if (skillRerollCount > 100)
                     {
                         // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                        SwapBackstoryWithShuffled(pawn, faction, req, xen);
                         skillRerollCount = 0;
                         noPositiveGainCount = 0;
                         return false;
@@ -513,7 +515,7 @@ namespace FasterRandomPlus.Source
                         if (backstoryConflictsWithSkillFilters)
                         {
                             //백스토리가 원인이면 셔플
-                            SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                            SwapBackstoryWithShuffled(pawn, faction, req, xen);
                             var childBs = pawn.story.GetBackstory(BackstorySlot.Childhood);
                             var adultBs = pawn.story.GetBackstory(BackstorySlot.Adulthood);
                             if (CheckBackstoryIsSatisfied(childBs, adultBs, requiredWorkTags))
@@ -547,7 +549,7 @@ namespace FasterRandomPlus.Source
                     if (noPositiveGainCount >= 50)
                     {
                         // PawnBioAndNameGenerator.GiveAppropriateBioAndNameTo(pawn, faction.def, req, xen);
-                        SwapBackstoryWithShuffled(pawn, faction, _req, xen);
+                        SwapBackstoryWithShuffled(pawn, faction, req, xen);
 
                         skillRerollCount = 0;
                         noPositiveGainCount = 0;
@@ -586,7 +588,7 @@ namespace FasterRandomPlus.Source
                     pawn.health.Reset();
                     try
                     {
-                        genHealth?.Invoke(pawn, _req);
+                        genHealth?.Invoke(pawn, req);
                         okHealth = !pawn.Dead && !pawn.Destroyed && !pawn.Downed;
                     }
                     catch
@@ -595,7 +597,7 @@ namespace FasterRandomPlus.Source
                 }
 
                 foreach (var part in hediffPart)
-                    part.Notify_NewPawnGenerating(pawn, _req.Context);
+                    part.Notify_NewPawnGenerating(pawn, req.Context);
 
                 swHealth.Stop();
                 totalHealth += swHealth.Elapsed.TotalMilliseconds;
@@ -609,7 +611,7 @@ namespace FasterRandomPlus.Source
 
                 #endregion
 
-                #region Passion, Gene
+                #region Passion
 
                 passionCount++;
                 swPassion.Restart();
@@ -638,12 +640,27 @@ namespace FasterRandomPlus.Source
 
                 swPassion.Stop();
                 totalPassion += swPassion.Elapsed.TotalMilliseconds;
+                
+                #endregion
+                
+
+                #region Abilities
+
+                swAbilities.Restart();
+                abilitiesCount++;
+                RefreshDirectAbilitiesFinal(pawn, req);
+                swAbilities.Stop();
+                totalAbilities += swAbilities.Elapsed.TotalMilliseconds;
+
+                #endregion
 
                 swGene.Restart();
                 if (ModsConfig.BiotechActive)
                 {
-                    RebuildGenesClean(pawn, xen, _req);
+                    RebuildGenesClean(pawn, xen, req);
                 }
+                
+                #region Gene
 
                 swGene.Stop();
                 totalGene += swGene.Elapsed.TotalMilliseconds;
@@ -697,7 +714,7 @@ namespace FasterRandomPlus.Source
                 swGene.Restart();
                 if (ModsConfig.BiotechActive)
                 {
-                    RebuildGenesClean(pawn, xen, _req);
+                    RebuildGenesClean(pawn, xen, req);
                 }
                 swGene.Stop();
                 totalGene += swGene.Elapsed.TotalMilliseconds;
@@ -706,13 +723,13 @@ namespace FasterRandomPlus.Source
             swRelations.Restart();
             bool oldFlag = FasterRandomPlus.isRerolling;
             FasterRandomPlus.isRerolling = false;
-            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, _req });
+            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
             FasterRandomPlus.isRerolling = oldFlag;
             swRelations.Stop();
             totalRelations += swRelations.Elapsed.TotalMilliseconds;
 
             swStyle.Restart();
-            genBodyType?.Invoke(pawn, _req);
+            genBodyType?.Invoke(pawn, req);
             if (Mismatch(pawn.gender, pawn.story.bodyType))
             {
                 var savedAdult = pawn.story.Adulthood;
@@ -731,19 +748,19 @@ namespace FasterRandomPlus.Source
                         
             if (endedByLimit)
             {
-                genSkills?.Invoke(pawn, _req);
+                genSkills?.Invoke(pawn, req);
             }
             
             swRedress.Restart();
             InvalidateApparelRequirements(pawn);
-            PawnGenerator.RedressPawn(pawn, _req);
+            PawnGenerator.RedressPawn(pawn, req);
             swRedress.Stop();
             totalRedress += swRedress.Elapsed.TotalMilliseconds;
             
             StartingPawnUtility.GeneratePossessions(pawn);
             
             swFinalNotify.Restart();
-            Find.Scenario.Notify_PawnGenerated(pawn, _req.Context, true);
+            Find.Scenario.Notify_PawnGenerated(pawn, req.Context, true);
             swFinalNotify.Stop();
             totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
 
@@ -760,6 +777,7 @@ namespace FasterRandomPlus.Source
             //     $"Age({ageCount}): {totalAge:F1} ms, " +
             //     $"Traits({traitCount}): {totalTraits:F1} ms, " +
             //     $"Skills({skillCount}): {totalSkills:F1} ms,\n" +
+            //     $"Skills({abilitiyCount}): {totalAbilities:F1} ms, +
             //     $"Health({healthCount}): {totalHealth:F1} ms, " +
             //     $"Gene: {totalGene:F1} ms,\n" +
             //     $"Work({workCount}): {totalWork:F1} ms, " +
@@ -1036,6 +1054,51 @@ namespace FasterRandomPlus.Source
                 if ((t == null && trait == null) || (t != null && trait != null && t.Label == trait.Label))
                     return true;
             return false;
+        }
+        
+        private static void RefreshDirectAbilitiesFinal(Pawn pawn, PawnGenerationRequest req)
+        {
+            if (pawn == null) return;
+
+            if (pawn.abilities == null)
+                pawn.abilities = new Pawn_AbilityTracker(pawn);
+            
+            pawn.abilities.abilities.Clear();
+
+            if (req.KindDef?.abilities != null)
+            {
+                foreach (var ability in req.KindDef.abilities)
+                {
+                    if (ability != null)
+                        pawn.abilities.GainAbility(ability);
+                }
+            }
+
+            if (FasterRandomPlus.hasHAR)
+                RegrantHarRaceAbilities(pawn);
+
+            RaceFix.Apply(pawn);
+
+            pawn.abilities.Notify_TemporaryAbilitiesChanged();
+        }
+
+        private static void RegrantHarRaceAbilities(Pawn pawn)
+        {
+            var race = pawn?.def as ThingDef_AlienRace;
+
+            var entries = race?.alienRace?.generalSettings?.abilities;
+            if (entries == null) return;
+
+            foreach (var entry in entries)
+            {
+                if (entry == null) continue;
+
+                foreach (var ability in entry.Select(pawn))
+                {
+                    if (ability != null)
+                        pawn.abilities.GainAbility(ability);
+                }
+            }
         }
 
         private static void GeneratePawnStyle(Pawn pawn)
