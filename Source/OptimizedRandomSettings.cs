@@ -23,6 +23,9 @@ namespace FasterRandomPlus.Source
         private static Action<Pawn, XenotypeDef, PawnGenerationRequest> genGenes;
         private static Func<List<Pawn>> getStartingPawns;
 
+        private static MutantDef forcedMutant;
+        private static bool preserveForcedMutant;
+
         public static int randomRerollCounter = 0;
         public static List<PawnFilter> pawnFilterList = new List<PawnFilter>();
         private static PawnFilter pawnFilter;
@@ -200,6 +203,25 @@ namespace FasterRandomPlus.Source
             // randomRerollCounter++;
             req = StartingPawnUtility.GetGenerationRequest(StartingPawnUtility.PawnIndex(pawn));
             req.ValidateAndFix();
+            
+            //mutant 관련
+            forcedMutant = null;
+            preserveForcedMutant = false;
+            if (ModsConfig.AnomalyActive)
+            {
+                forcedMutant = req.ForcedMutant ?? req.KindDef?.mutant;
+
+                if (forcedMutant != null)
+                {
+                    preserveForcedMutant = true;
+                }
+                else if (pawn != null && pawn.IsMutant && pawn.mutant != null)
+                {
+                    forcedMutant = pawn.mutant.Def;
+                    preserveForcedMutant = forcedMutant != null;
+                }
+            }
+            
             faction = req.Faction
                               ?? (!Find.FactionManager.TryGetRandomNonColonyHumanlikeFaction(out var tmp, false, true)
                                   ? Faction.OfAncients
@@ -757,6 +779,14 @@ namespace FasterRandomPlus.Source
             swRedress.Stop();
             totalRedress += swRedress.Elapsed.TotalMilliseconds;
             
+            if (ModsConfig.AnomalyActive && preserveForcedMutant && forcedMutant != null)
+            {
+                if (!pawn.IsMutant || pawn.mutant == null || pawn.mutant.Def != forcedMutant)
+                {
+                    MutantUtility.SetFreshPawnAsMutant(pawn, forcedMutant);
+                }
+            }
+            
             StartingPawnUtility.GeneratePossessions(pawn);
             
             swFinalNotify.Restart();
@@ -806,6 +836,8 @@ namespace FasterRandomPlus.Source
             cachedName = null;
             cachedChildBs = null;
             cachedAdultBs = null;
+            forcedMutant = null;
+            preserveForcedMutant = false;
 
             pawn = null;
             pawns = null;
