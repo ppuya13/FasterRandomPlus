@@ -52,6 +52,10 @@ namespace FasterRandomPlus
             var drlPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(drawRerollLimit_Prefix));
             harmony.Patch(drlOrigin, new HarmonyMethod(drlPrefix));
             
+            var draOrigin = AccessTools.Method(typeof(PanelOthers), "drawRerollAlgorithm");
+            var draPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(drawRerollAlgorithm_Prefix));
+            harmony.Patch(draOrigin, new HarmonyMethod(draPrefix));
+            
             var gpRelOrigin = AccessTools.Method(typeof(PawnGenerator), "GeneratePawnRelations", new[] { typeof(Pawn), typeof(PawnGenerationRequest).MakeByRefType() });
             var rpRelPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(SkipGeneratePawnRelations));
             harmony.Patch( gpRelOrigin, new HarmonyMethod(rpRelPrefix) );
@@ -370,6 +374,27 @@ namespace FasterRandomPlus
 
             Find.WindowStack.Add(new FloatMenu(options));
 
+            return false;
+        }
+        
+        static bool drawRerollAlgorithm_Prefix(PanelOthers __instance, Rect rect)
+        {
+            const string label = "Faster Random Plus";
+
+            RandomSettings.PawnFilter.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
+
+            if (!Widgets.ButtonText(rect, label))
+                return false;
+
+            var options = new List<FloatMenuOption>
+            {
+                new FloatMenuOption(label, () =>
+                {
+                    RandomSettings.PawnFilter.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
+                })
+            };
+
+            Find.WindowStack.Add(new FloatMenu(options));
             return false;
         }
     }
