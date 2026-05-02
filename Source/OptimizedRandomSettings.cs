@@ -1236,28 +1236,40 @@ namespace FasterRandomPlus.Source
             }
         }
         
-        public static void RemoveAllGenesWithSideEffects(Pawn pawn)
-        {
-            if (!ModsConfig.BiotechActive || pawn?.genes == null) return;
-
-            var genes = pawn.genes.GenesListForReading.ToList();
-            for (int i = genes.Count - 1; i >= 0; i--)
-            {
-                pawn.genes.RemoveGene(genes[i]);
-            }
-        }
+        // 일부 모드 호환성 때문에 제거(PostRemove)
+        // public static void RemoveAllGenesWithSideEffects(Pawn pawn)
+        // {
+        //     if (!ModsConfig.BiotechActive || pawn?.genes == null) return;
+        //
+        //     var genes = pawn.genes.GenesListForReading.ToList();
+        //     for (int i = genes.Count - 1; i >= 0; i--)
+        //     {
+        //         try
+        //         {
+        //             pawn.genes.RemoveGene(genes[i]);
+        //         }
+        //         catch (Exception ex)
+        //         {
+        //             Log.Warning($"[FasterRandomPlus] Failed to remove gene {genes[i]?.def?.defName}: {ex.Message}");
+        //         }
+        //     }
+        // }
 
         private static void RebuildGenesClean(Pawn pawn, XenotypeDef xenotype, PawnGenerationRequest req)
         {
             if (!ModsConfig.BiotechActive || pawn == null) return;
 
-            RemoveAllGenesWithSideEffects(pawn);
+            // RemoveAllGenesWithSideEffects(pawn);
 
+            
             pawn.genes = new Pawn_GeneTracker(pawn);
 
             genGenes?.Invoke(pawn, xenotype, req);
 
             pawn.story?.traits?.RecalculateSuppression();
+            pawn.skills?.DirtyAptitudes();
+            pawn.Notify_DisabledWorkTypesChanged();
+            pawn.Drawer?.renderer?.SetAllGraphicsDirty();
         }
 
         private static void InvalidateApparelRequirements(Pawn pawn)

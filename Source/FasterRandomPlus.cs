@@ -129,7 +129,7 @@ namespace FasterRandomPlus
             {
                 OptimizedRandomSettings.PawnFilter = RandomSettings.PawnFilter;
                 OptimizedRandomSettings.ResetRerollCounter();
-                ResetPawnState(pawnIndex);
+                if (!ResetPawnState(pawnIndex)) return false;
                 // OptimizedRandomSettings.Reroll(pawnIndex);
                 RerollJob.Start(pawnIndex, OptimizedRandomSettings.PawnFilter.RerollLimit);
                 RandomSettings.randomRerollCounter = OptimizedRandomSettings.randomRerollCounter;
@@ -149,25 +149,35 @@ namespace FasterRandomPlus
             return false;
         }
 
-        static void ResetPawnState(int pawnIndex)
+        static bool ResetPawnState(int pawnIndex)
         {
-            var pi = typeof(StartingPawnUtility)
-                .GetProperty("StartingAndOptionalPawns", BindingFlags.NonPublic | BindingFlags.Static);
-            var pawns = (List<Pawn>)pi.GetValue(null);
-            var pawn = pawns[pawnIndex];
-
-            pawn.relations.ClearAllRelations();
-            pawn.health.hediffSet.hediffs.Clear();
-            pawn.story.traits.allTraits.Clear();
-            pawn.skills = new Pawn_SkillTracker(pawn);
-            pawn.workSettings?.EnableAndInitialize();
-            if (ModsConfig.BiotechActive)
+            try
             {
-                OptimizedRandomSettings.RemoveAllGenesWithSideEffects(pawn);
-                pawn.genes = new Pawn_GeneTracker(pawn);
-            }
+                var pi = typeof(StartingPawnUtility)
+                    .GetProperty("StartingAndOptionalPawns", BindingFlags.NonPublic | BindingFlags.Static);
+                var pawns = (List<Pawn>)pi.GetValue(null);
+                var pawn = pawns[pawnIndex];
 
-            RandomSettings.GeneratePawnStyle(pawn);
+                pawn.relations.ClearAllRelations();
+                pawn.health.hediffSet.hediffs.Clear();
+                pawn.story.traits.allTraits.Clear();
+                pawn.skills = new Pawn_SkillTracker(pawn);
+                pawn.workSettings?.EnableAndInitialize();
+                if (ModsConfig.BiotechActive)
+                {
+                    // OptimizedRandomSettings.RemoveAllGenesWithSideEffects(pawn);
+                    pawn.genes = new Pawn_GeneTracker(pawn);
+                }
+                
+                RandomSettings.GeneratePawnStyle(pawn);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Error("[FasterRandomPlus] ResetPawnState failed: " + e);
+                isRerolling = false;
+                return false;
+            }
         }
         
         static bool SkipGeneratePawnRelations(Pawn pawn, ref PawnGenerationRequest request)
