@@ -1124,6 +1124,30 @@ namespace FasterRandomPlus.Source
 
             if (FasterRandomPlus.hasHAR)
                 RegrantHarRaceAbilities(pawn);
+            
+            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            {
+                var comps = hediff.def.comps;
+                if (comps == null) continue;
+
+                foreach (var comp in comps)
+                {
+                    if (!(comp is HediffCompProperties_GiveAbility giveAbility) ||
+                        comp.compClass != typeof(HediffComp_GiveAbility))
+                        continue;
+
+                    if (giveAbility.abilityDef != null)
+                        pawn.abilities.GainAbility(giveAbility.abilityDef);
+
+                    if (giveAbility.abilityDefs == null) continue;
+
+                    foreach (var ability in giveAbility.abilityDefs)
+                    {
+                        if (ability != null)
+                            pawn.abilities.GainAbility(ability);
+                    }
+                }
+            }
 
             RaceFix.Apply(pawn);
 
