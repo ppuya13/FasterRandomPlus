@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using RandomPlus;
+using RimWorld;
 using Verse;
 
 namespace FasterRandomPlus.Source
@@ -59,6 +60,7 @@ namespace FasterRandomPlus.Source
         public static void End()
         {
             OptimizedRandomSettings.EndReroll();
+            SocialCardUtility.ClearCaches();
             OptimizedRandomSettings.ClearCache();
             State = RerollState.Completed;
             FasterRandomPlus.isRerolling = false;
