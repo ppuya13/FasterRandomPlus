@@ -748,10 +748,21 @@ namespace FasterRandomPlus.Source
             totalFinalNotify += swFinalNotify.Elapsed.TotalMilliseconds;
 
             swRelations.Restart();
-            bool oldFlag = FasterRandomPlus.isRerolling;
-            FasterRandomPlus.isRerolling = false;
-            MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
-            FasterRandomPlus.isRerolling = oldFlag;
+            if (!req.AllowedDevelopmentalStages.Newborn() && req.CanGeneratePawnRelations)
+            {
+                bool oldFlag = FasterRandomPlus.isRerolling;
+
+                try
+                {
+                    FasterRandomPlus.isRerolling = false;
+                    MiGeneratePawnRelations.Invoke(null, new object[] { pawn, req });
+                }
+                finally
+                {
+                    FasterRandomPlus.isRerolling = oldFlag;
+                }
+            }
+            
             swRelations.Stop();
             totalRelations += swRelations.Elapsed.TotalMilliseconds;
 
