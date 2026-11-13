@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using FasterRandomPlus.Source;
 using HarmonyLib;
 using RandomPlus;
@@ -17,6 +18,8 @@ namespace FasterRandomPlus
     public static class FasterRandomPlus
     {
         private static readonly Harmony harmony = new Harmony("balensiad.FasterRandomPlus");
+        private static readonly ConditionalWeakTable<PawnFilter, StrongBox<bool>> frpSelections =
+            new ConditionalWeakTable<PawnFilter, StrongBox<bool>>();
         public static readonly bool hasHAR;
         
         static int lastRerollFrame = -1;
@@ -47,6 +50,14 @@ namespace FasterRandomPlus
             OptimizedRandomSettings.Init();
             
             PatchRerollLimitOptionValues();
+
+            var edOrigin = AccessTools.Method(typeof(PawnFilter), nameof(PawnFilter.ExposeData));
+            var edPostfix = AccessTools.Method(typeof(FasterRandomPlus), nameof(PawnFilterExposeData_Postfix));
+            harmony.Patch(edOrigin, postfix:new HarmonyMethod(edPostfix));
+
+            var roOrigin = AccessTools.Method(typeof(PawnFilter), nameof(PawnFilter.ResetOther));
+            var roPostfix = AccessTools.Method(typeof(FasterRandomPlus), nameof(ResetOther_Postfix));
+            harmony.Patch(roOrigin, postfix:new HarmonyMethod(roPostfix));
             
             var drlOrigin = AccessTools.Method(typeof(PanelOthers), "drawRerollLimit");
             var drlPrefix = AccessTools.Method(typeof(FasterRandomPlus), nameof(drawRerollLimit_Prefix));
@@ -94,6 +105,10 @@ namespace FasterRandomPlus
         
         static bool RerollPrefix(int pawnIndex)
         {
+            if (!IsFrpSelected(RandomSettings.PawnFilter)
+                || Find.WindowStack.currentlyDrawnWindow is Dialog_ChooseNewWanderers)
+                return true;
+
             int thisFrame = Time.frameCount;
             if (lastRerollFrame != thisFrame)
             {
@@ -180,6 +195,38 @@ namespace FasterRandomPlus
             }
         }
         
+        private static bool IsFrpSelected(PawnFilter filter)
+        {
+            return frpSelections.GetValue(filter, _ => new StrongBox<bool>(true)).Value;
+        }
+
+        private static void SetFrpSelected(PawnFilter filter, bool selected)
+        {
+            frpSelections.GetValue(filter, _ => new StrongBox<bool>(true)).Value = selected;
+        }
+        
+        static void PawnFilterExposeData_Postfix(PawnFilter __instance)
+        {
+            bool selected = IsFrpSelected(__instance);
+
+            Scribe_Values.Look(
+                ref selected,
+                "fasterRandomPlusSelected",
+                true
+            );
+
+            if (Scribe.mode == LoadSaveMode.LoadingVars)
+            {
+                SetFrpSelected(__instance, selected);
+            }
+        }
+
+        static void ResetOther_Postfix(PawnFilter __instance)
+        {
+            // __instance.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
+            SetFrpSelected(__instance, true);
+        }
+        
         static bool SkipGeneratePawnRelations(Pawn pawn, ref PawnGenerationRequest request)
         {
             return !isRerolling;
@@ -226,7 +273,8 @@ namespace FasterRandomPlus
             PawnGenerationRequest request,
             ref XenotypeDef __result)
         {
-            if (ModsConfig.BiotechActive && hasHAR && OptimizedRandomSettings.SelectAny)
+            if (isRerolling && ModsConfig.BiotechActive && hasHAR
+                && OptimizedRandomSettings.SelectAny)
             {
                 var pool = DefDatabase<XenotypeDef>.AllDefsListForReading
                     .Where(x => RaceRestrictionSettings.CanUseXenotype(x, request.KindDef.race))
@@ -248,6 +296,7 @@ namespace FasterRandomPlus
             bool randomize
         )
         {
+            if (!IsFrpSelected(RandomSettings.PawnFilter)) return;
             if (xenotype != null) OptimizedRandomSettings.SelectAny = false;
             
             if (ModsConfig.BiotechActive && xenotype != null && randomize)
@@ -389,20 +438,54 @@ namespace FasterRandomPlus
         
         static bool drawRerollAlgorithm_Prefix(PanelOthers __instance, Rect rect)
         {
-            const string label = "Faster Random Plus";
+            PawnFilter filter = RandomSettings.PawnFilter;
+            bool frpSelected = IsFrpSelected(filter);
 
-            RandomSettings.PawnFilter.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
+            var originalOptions = PawnFilter.RerollAlgorithmOptionValues;
+            int selectedIndex = (int)filter.RerollAlgorithm;
 
-            if (!Widgets.ButtonText(rect, label))
+            string currentLabel;
+
+            if (frpSelected)
+            {
+                currentLabel = "FasterRandomPlus";
+            }
+            else if (selectedIndex >= 0 && selectedIndex < originalOptions.Length)
+            {
+                currentLabel = originalOptions[selectedIndex]
+                    .Translate().CapitalizeFirst().ToString();
+            }
+            else
+            {
+                currentLabel = filter.RerollAlgorithm.ToString();
+            }
+
+            if (!Widgets.ButtonText(rect, currentLabel))
                 return false;
 
-            var options = new List<FloatMenuOption>
+            var options = new List<FloatMenuOption>();
+
+            for (int i = 0; i < originalOptions.Length; i++)
             {
-                new FloatMenuOption(label, () =>
+                int index = i;
+
+                string label = originalOptions[i]
+                    .Translate().CapitalizeFirst().ToString();
+
+                options.Add(new FloatMenuOption(label, () =>
                 {
-                    RandomSettings.PawnFilter.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
-                })
-            };
+                    filter.RerollAlgorithm =
+                        (PawnFilter.RerollAlgorithmOptions)index;
+
+                    SetFrpSelected(filter, false);
+                }));
+            }
+
+            options.Add(new FloatMenuOption("FasterRandomPlus", () =>
+            {
+                filter.RerollAlgorithm = PawnFilter.RerollAlgorithmOptions.Normal;
+                SetFrpSelected(filter, true);
+            }));
 
             Find.WindowStack.Add(new FloatMenu(options));
             return false;
