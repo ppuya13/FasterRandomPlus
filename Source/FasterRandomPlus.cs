@@ -22,6 +22,7 @@ namespace FasterRandomPlus
             new ConditionalWeakTable<PawnFilter, StrongBox<bool>>();
         public static readonly bool hasHAR;
         
+        internal static bool runVanillaRerollOnce = false;
         static int lastRerollFrame = -1;
         static bool alreadyOptimized = false;
         internal static bool isRerolling = false;
@@ -105,6 +106,12 @@ namespace FasterRandomPlus
         
         static bool RerollPrefix(int pawnIndex)
         {
+            if (runVanillaRerollOnce)
+            {
+                runVanillaRerollOnce = false;
+                return true;
+            }
+            
             if (!IsFrpSelected(RandomSettings.PawnFilter)
                 || Find.WindowStack.currentlyDrawnWindow is Dialog_ChooseNewWanderers)
                 return true;

@@ -59,16 +59,43 @@ namespace FasterRandomPlus.Source
 
         public static void End()
         {
-            OptimizedRandomSettings.EndReroll();
-            SocialCardUtility.ClearCaches();
-            OptimizedRandomSettings.ClearCache();
-            State = RerollState.Completed;
-            FasterRandomPlus.isRerolling = false;
-            
-            if (_totalSw != null && _totalSw.IsRunning)
+            System.Exception exception = null;
+
+            try
             {
-                _totalSw.Stop();
-                Log.Message($"[FasterRandomPlus] Reroll Completed: {_totalSw.Elapsed.TotalSeconds:F2} sec");
+                OptimizedRandomSettings.EndReroll();
+                State = RerollState.Completed;
+            }
+            catch (System.Exception ex)
+            {
+                exception = ex;
+                State = RerollState.Error;
+            }
+            finally
+            {
+                try
+                {
+                    SocialCardUtility.ClearCaches();
+                    OptimizedRandomSettings.ClearCache();
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Warning("[FasterRandomPlus] ClearCaches failed: " + ex);
+                }
+                finally
+                {
+                    FasterRandomPlus.isRerolling = false;
+                    _totalSw?.Stop();
+                }
+            }
+
+            if (State == RerollState.Completed)
+            {
+                Log.Message($"[FasterRandomPlus] Reroll Completed: {_totalSw?.Elapsed.TotalSeconds ?? 0:F2} sec");
+            }
+            else
+            {
+                Log.Error("[FasterRandomPlus] EndReroll failed: " + exception);
             }
         }
 
@@ -84,13 +111,14 @@ namespace FasterRandomPlus.Source
             {
                 var finished = OptimizedRandomSettings.StepOnce();
                 steps++;
+                
+                RandomSettings.randomRerollCounter = OptimizedRandomSettings.randomRerollCounter;
+                
                 if (finished)
                 {
                     End();
                     break;
                 }
-
-                RandomSettings.randomRerollCounter = OptimizedRandomSettings.randomRerollCounter;
             }
         }
     }
