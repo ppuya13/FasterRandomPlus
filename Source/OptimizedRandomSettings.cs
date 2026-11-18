@@ -168,6 +168,22 @@ namespace FasterRandomPlus.Source
         public static void BeginReroll(int pawnIndex, int limit)
         {
             swTotal.Restart();
+            
+            bioFailCount = 0;
+            noPositiveGainCount = 0;
+            skillRerollCount = 0;
+
+            cacheCount1 = 0;
+            cacheCount2 = 0;
+            genderCount = 0;
+            ageCount = 0;
+            traitCount = 0;
+            skillCount = 0;
+            abilitiesCount = 0;
+            workCount = 0;
+            healthCount = 0;
+            passionCount = 0;
+            finalCount = 0;
             endedByLimit = false;
             
             requiredWorkTags = WorkTags.None;
@@ -931,6 +947,12 @@ namespace FasterRandomPlus.Source
                 (childBs?.workDisables ?? WorkTags.None) |
                 (adultBs?.workDisables ?? WorkTags.None);
 
+            if (FasterRandomPlus.hasHAR)
+            {
+                disabled |= GetHARForcedTraitDisabledWorkTags(childBs);
+                disabled |= GetHARForcedTraitDisabledWorkTags(adultBs);
+            }
+
             if ((req & disabled) != WorkTags.None)
                 return false;
 
@@ -944,6 +966,27 @@ namespace FasterRandomPlus.Source
                 default:
                     return true;
             }
+        }
+        
+        private static WorkTags GetHARForcedTraitDisabledWorkTags(BackstoryDef backstory)
+        {
+            if (!(backstory is AlienBackstoryDef alienBackstory))
+                return WorkTags.None;
+
+            WorkTags disabled = WorkTags.None;
+
+            foreach (var entry in alienBackstory.forcedTraitsChance)
+            {
+                if (entry.chance < 100f)
+                    continue;
+
+                if (entry.entry?.def == null)
+                    continue;
+
+                disabled |= entry.entry.def.disabledWorkTags;
+            }
+
+            return disabled;
         }
 
         private static bool CheckPawnIsSatisfied(Pawn pawn)
